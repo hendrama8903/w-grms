@@ -1,0 +1,210 @@
+@using GRMS.Models
+@{
+    var plants = (List<CkbSourceOptions>)ViewData["Plants"];
+}
+<link rel="stylesheet" href="~/css/devextreme/dx.light.css" />
+<script src="~/js/devextreme/dx.web.js"></script>
+
+<style>
+    .pm-plant { display: flex; align-items: center; gap: 8px; }
+    .pm-plant label { margin: 0; font-weight: 600; font-size: 12.5px; }
+    .pm-plant select { min-width: 220px; height: 34px; border: 1.5px solid #D0D6DE; border-radius: 8px; padding: 0 8px; font-size: 12.5px; }
+</style>
+
+<section class="content">
+    <div class="row">
+        <div class="col-xs-12">
+            <div class="dp-card">
+                <div class="box-header dp-toolbar">
+                    <div class="dp-toolbar-left">
+                        <div class="pm-plant">
+                            <label for="cboPlant">Plant</label>
+                            <select id="cboPlant">
+                                @foreach (var p in plants)
+                                {
+                                    <option value="@p.PlantCode">@p.PlantCode - @p.PlantName</option>
+                                }
+                            </select>
+                        </div>
+                        <button type="button" class="dp-btn dp-btn-outline" id="btn_refresh"><i class="fa fa-refresh"></i> Refresh</button>
+                        @if ((bool)ViewData["Sync"])
+                        {
+                            <button type="button" class="dp-btn dp-btn-primary" id="btn_sync"><i class="fa fa-cloud-download"></i> Update from CKB</button>
+                        }
+                    </div>
+                    <div class="dp-toolbar-right">
+                        <button type="button" class="dp-btn dp-btn-outline" id="btn_export"><i class="fa fa-download"></i> Export</button>
+                        <button type="button" class="dp-icon-btn" id="btn_columns" title="Show/Hide Columns"><i class="fa fa-cog"></i></button>
+                    </div>
+                </div>
+                <div class="box-body">
+                    <div id="datagrid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script type="text/javascript">
+    var gCanDelete = @Json.Serialize((bool)ViewData["Delete"]);
+
+    function computeGridHeight() {
+        // sisa di bawah grid = border kartu + padding bawah halaman (~33px)
+        return Math.max(300, $(window).height() - $("#datagrid").offset().top - 36);
+    }
+
+    function getPlant() {
+        return $("#cboPlant").val();
+    }
+
+    $(document).ready(function () {
+        var gridStore = new DevExpress.data.CustomStore({
+            loadMode: "raw",
+            load: function () {
+                var d = withLoading($.Deferred());
+                $.ajax({
+                    type: "POST",
+                    url: "@Url.Action("Search", "PartsMaster")",
+                    data: { plantCode: getPlant() }
+                }).done(function (result) {
+                    if (result.status == true) {
+                        d.resolve(result.data);
+                    } else {
+                        showErrorMesgGrowl(result.message);
+                        d.resolve([]);
+                    }
+                }).fail(function () {
+                    d.reject("Data loading error");
+                });
+                return d.promise();
+            }
+        });
+
+        var columns = [
+            {
+                caption: "No",
+                width: 55,
+                alignment: "center",
+                allowFiltering: false,
+                allowHiding: false,
+                cellTemplate: function (container, options) {
+                    container.text(options.component.pageIndex() * options.component.pageSize() + options.row.rowIndex + 1);
+                }
+            },
+            { dataField: "SUPSCD", caption: "Supplier Code" },
+            { dataField: "SUPPCD", caption: "Supplier Plant Code" },
+            { dataField: "SUPSHD", caption: "Supplier Shipping Dock" },
+            { dataField: "PLCPCD", caption: "Plant Code" },
+            { dataField: "RACRAC", caption: "Receiving Area Code" },
+            { dataField: "PAMPNO", caption: "Part Number" },
+            { dataField: "PAMPCK", caption: "Pcs/Kbn", dataType: "number" },
+            { dataField: "PAMPNM", caption: "Part Name" },
+            { dataField: "PAMUNO", caption: "Unique No" },
+            { dataField: "PAMBSC", caption: "Box Spec" }
+        ];
+
+        if (gCanDelete) {
+            columns.push({
+                caption: "Delete",
+                width: 70,
+                alignment: "center",
+                allowFiltering: false,
+                allowHiding: false,
+                fixed: true,
+                fixedPosition: "right",
+                cellTemplate: function (container, options) {
+                    $("<button>").attr({ type: "button", title: "Delete" }).addClass("dp-act-kebab")
+                        .html('<i class="fa fa-trash-o" style="color:#C62828"></i>')
+                        .on("click", function () { onDelete(options.data); })
+                        .appendTo(container);
+                }
+            });
+        }
+
+        $("#datagrid").dxDataGrid({
+            dataSource: gridStore,
+            showBorders: true,
+            columnAutoWidth: true,
+            allowColumnResizing: true,
+            columnResizingMode: "widget",
+            noDataText: "Data not found.",
+            height: computeGridHeight(),
+            filterRow: { visible: true, applyFilter: "auto" },
+            headerFilter: { visible: true },
+            toolbar: { visible: false },
+            paging: { pageSize: 50 },
+            pager: {
+                visible: true,
+                displayMode: "compact",
+                showPageSizeSelector: true,
+                allowedPageSizes: [25, 50, 100, 200],
+                showInfo: true,
+                showNavigationButtons: true
+            },
+            columnChooser: { enabled: true, mode: "select" },
+            columnFixing: { enabled: true },
+            columns: columns
+        });
+
+        $("#cboPlant").on("change", refreshGrid);
+        $("#btn_refresh").on("click", refreshGrid);
+
+        $("#btn_columns").on("click", function () {
+            $("#datagrid").dxDataGrid("instance").showColumnChooser();
+        });
+
+        $("#btn_export").on("click", function () {
+            window.location.href = "@Url.Action("DownloadExcel", "PartsMaster")?plantCode=" + encodeURIComponent(getPlant());
+        });
+
+        $("#btn_sync").on("click", function () {
+            var plantText = $("#cboPlant option:selected").text();
+            showConfirmMesg("Update parts master for plant " + plantText + " from CKB database?", function () {
+                popUpProgressShow();
+                $.ajax({
+                    type: "POST",
+                    url: "@Url.Action("Sync", "PartsMaster")",
+                    data: { plantCode: getPlant() }
+                }).done(function (result) {
+                    if (result.status == true) {
+                        showSuccessMesgGrowl(result.message);
+                        refreshGrid();
+                    } else {
+                        showErrorMesgGrowl(result.message);
+                    }
+                }).fail(function () {
+                    showErrorMesgGrowl("Update failed");
+                }).always(function () {
+                    popUpProgressHide();
+                });
+            }, "Confirmation");
+        });
+
+        $(window).on("resize", function () {
+            $("#datagrid").dxDataGrid("instance").option("height", computeGridHeight());
+        });
+    });
+
+    function refreshGrid() {
+        $("#datagrid").dxDataGrid("instance").refresh();
+    }
+
+    function onDelete(row) {
+        showConfirmMesg("Are you sure you want to delete part " + row.PAMPNO + " (" + row.PAMPNM + ")?", function () {
+            $.ajax({
+                type: "POST",
+                url: "@Url.Action("Delete", "PartsMaster")",
+                data: row
+            }).done(function (result) {
+                if (result.status == true) {
+                    showSuccessMesgGrowl("Delete success");
+                    refreshGrid();
+                } else {
+                    showErrorMesgGrowl(result.message);
+                }
+            }).fail(function () {
+                showErrorMesgGrowl("Delete failed");
+            });
+        }, "Confirmation");
+    }
+</script>

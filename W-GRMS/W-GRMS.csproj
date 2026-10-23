@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>GRMS</RootNamespace>
+    <AssemblyName>W-GRMS</AssemblyName>
+    <!-- Report desktop (Reports/*.resx) menyimpan logo sebagai Bitmap -->
+    <GenerateResourceUsePreserializedResources>true</GenerateResourceUsePreserializedResources>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Render report (XtraReport -> PDF) di server; viewer web DevExpress tidak dipakai -->
+    <PackageReference Include="DevExpress.Reporting.Core" Version="22.2.11" />
+    <PackageReference Include="DevExtreme.AspNet.Core" Version="22.2.11" />
+    <PackageReference Include="DevExtreme.AspNet.Data" Version="2.9.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Razor.RuntimeCompilation" Version="8.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.8" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="NPOI" Version="2.5.6" />
+    <PackageReference Include="System.Resources.Extensions" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,128 @@
+﻿@using Microsoft.AspNetCore.Http
+
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>GRMS - @ViewData["Title"]</title>
+    <link rel="icon" type="image/x-icon" href="~/favicon.ico?v=grms" />
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <!-- Bootstrap -->
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css">
+    <!-- DataTables -->
+    <link rel="stylesheet" href="~/lib/datatables.net-bs/css/dataTables.bootstrap.min.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="~/lib/font-awesome/css/font-awesome.min.css">
+    <link rel="stylesheet" href="~/lib/fontawesome-iconpicker-1.4.0/dist/css/fontawesome-iconpicker.min.css">
+    <!-- Ionicons -->
+    <link rel="stylesheet" href="~/lib/Ionicons/css/ionicons.min.css">
+    <link rel="Stylesheet" href="~/lib/select2/dist/css/select2.css" />
+    <link rel="Stylesheet" href="~/lib/jquery-message-box-3.2.2/dist/messagebox.css" />
+    <link rel="stylesheet" href="~/css/site.css">
+    <!-- jQuery 3 -->
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <!-- Google Font -->
+    <link rel="stylesheet" href="~/lib/google-font/google-font.css">
+    <!-- Font tema admin (self-hosted, tidak butuh internet) -->
+    <link rel="stylesheet" href="~/css/fonts.css">
+    <!-- date-range picker -->
+    <link rel="stylesheet" href="~/dist/css/daterangepicker.css">
+    <!-- date picker -->
+    <link rel="stylesheet" href="~/dist/css/bootstrap-datepicker3.css">
+    <!-- date range picker -->
+    <link rel="stylesheet" href="~/lib/daterangepicker-master/daterangepicker.css">
+    <!-- print.js -->
+    <link rel="stylesheet" href="~/lib/print-js/print.min.css">
+    <!-- Tema admin (harus paling akhir agar menimpa style di atas) -->
+    <link rel="stylesheet" href="~/css/admin-theme.css">
+    <style type="text/css">
+        div.dataTables_wrapper div.dataTables_processing {
+            position: fixed;
+        }
+    </style>
+</head>
+<body class="adm-body">
+    <div class="adm-scrim" id="admScrim" onclick="admToggleNav(false)"></div>
+    <div class="adm-app" id="admApp">
+
+        <!-- ===== SIDEBAR: rail + panel menu ===== -->
+        <aside class="adm-sidebar" id="admSidebar">
+            <div class="adm-rail">
+                <a class="adm-rail-ic" href="~/" title="Home">
+                    <img src="~/images/grms-logo.png" alt="GRMS">
+                </a>
+                <div class="adm-rail-vtext">GOODS <em>RECEIVING</em> MANAGEMENT SYSTEM</div>
+                <button type="button" class="adm-rail-collapse" onclick="admToggleCollapse()" title="Show / hide menu">
+                    <i class="fa fa-angle-double-left"></i>
+                </button>
+            </div>
+            <div class="adm-sidepanel">
+                <div class="adm-menu-search">
+                    <i class="fa fa-search"></i>
+                    <input type="text" id="admMenuSearch" placeholder="Search menu..." autocomplete="off">
+                </div>
+                @Html.Partial("_MainMenu")
+            </div>
+        </aside>
+
+        <!-- ===== MAIN ===== -->
+        <main class="adm-main">
+            <div class="adm-topbar">
+                <button type="button" class="adm-topbtn adm-menu-btn" onclick="admToggleNav(true)">
+                    <i class="fa fa-bars"></i>
+                </button>
+                <div class="adm-crumb">GRMS &nbsp;/&nbsp; <b>@ViewData["Title"]</b></div>
+                <div class="adm-top-right">
+                    <a class="adm-user" href="~/Auth/ChangePassword" title="Change Password">
+                        <img src="~/dist/img/user.png" id="imgHeaderAvatar" alt="User Image">
+                        <span>
+                            <span class="nm" id="txtUserNameLayout">@HttpContextAccessor.HttpContext.Session.GetString("FULL_NAME")</span>
+                            <span class="ps">@HttpContextAccessor.HttpContext.Session.GetString("USERNAME") &middot; @HttpContextAccessor.HttpContext.Session.GetString("ROLE_NAME")</span>
+                        </span>
+                    </a>
+                    <a class="adm-topbtn" href="~/Auth/ChangePassword" title="Change Password">
+                        <i class="fa fa-key"></i>
+                    </a>
+                    <button type="button" class="adm-topbtn adm-topbtn-logout" onclick="confirmLogout();" title="Logout">
+                        <i class="fa fa-sign-out"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="adm-content">
+                @RenderBody()
+            </div>
+        </main>
+    </div>
+    <!-- REQUIRED JS SCRIPTS -->
+    <script src="~/lib/bootstrap/dist/js/bootstrap.min.js"></script>
+    <script src="~/lib/datatables.net/js/jquery.dataTables.min.js"></script>
+    <script src="~/lib/datatables.net-bs/js/dataTables.bootstrap.min.js"></script>
+    <script src="~/lib/bootstrap-growl/jquery.bootstrap-growl.js"></script>
+    <script src="~/lib/select2/dist/js/select2.full.min.js"></script>
+    <script src="~/lib/jquery-message-box-3.2.2/dist/messagebox.js"></script>
+    <script src="~/lib/blockUI/jquery.blockUI.js"></script>
+    <script src="~/lib/bootstrap-filestyle-2.1.0/src/bootstrap-filestyle.js"></script>
+    <script src="~/js/site.js"></script>
+    <script src="~/js/admin-theme.js"></script>
+    <script src="~/lib/moment/min/moment.min.js"></script>
+    <script src="~/dist/js/daterangepicker.js"></script>
+    <script src="~/dist/js/bootstrap-datepicker.js"></script>
+    <script src="~/lib/fontawesome-iconpicker-1.4.0/dist/js/fontawesome-iconpicker.js"></script>
+    <script src="~/lib/daterangepicker-master/daterangepicker.js"></script>
+    <script src="~/lib/print-js/print.min.js"></script>
+    <script type="text/javascript">
+        function confirmLogout() {
+            showConfirmMesg("Are you sure you want to log out?", logout, "Confirmation");
+        }
+
+        function logout() {
+            window.location.href = '@Url.Action("Logout", "Auth")';
+        }
+    </script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

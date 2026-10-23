@@ -1,0 +1,549 @@
+<link rel="stylesheet" href="~/css/devextreme/dx.light.css" />
+<script src="~/js/devextreme/dx.web.js"></script>
+
+<style>
+    .gr-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px 16px; padding: 14px 16px 4px; }
+    .gr-form label { display: block; font-size: 12px; font-weight: 600; color: #26314f; margin-bottom: 4px; }
+    .gr-form input { width: 100%; height: 34px; border: 1.5px solid #D0D6DE; border-radius: 8px; padding: 0 10px; font-size: 13px; }
+    .gr-form input[readonly] { background: #EEF1F5; }
+    .gr-form input.gr-dn { font-weight: 700; font-size: 14px; border-color: #2450D8; }
+    .gr-detail-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 16px 0; min-height: 28px; }
+    .gr-check { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; font-weight: 700; color: #26314f; cursor: pointer; text-transform: uppercase; letter-spacing: .02em; }
+    .gr-check input { width: 16px; height: 16px; margin: 0; cursor: pointer; }
+    .gr-check.disabled { opacity: .5; cursor: default; }
+    /* kolom Actual Qty yang bisa diubah (seperti desktop: sel kuning) */
+    #datagrid td.gr-actual-edit { background: #FFF7B8 !important; font-weight: 600; }
+    #datagrid td.gr-receive { cursor: pointer; }
+    /* Status GRN tersimpan: satu baris ringkas di baris atas grid (tidak menambah tinggi halaman) */
+    /* slot di sebelah kanan Plant Code, selebar 2 kolom form, sejajar dengan input */
+    .gr-banner-slot { grid-column: span 2; align-self: end; min-width: 0; }
+    .gr-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; min-height: 34px; padding: 5px 12px; border-radius: 8px; border: 1px solid; font-size: 12.5px; line-height: 1.5; }
+    .gr-banner[hidden] { display: none; }
+    .gr-banner .ttl { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+    .gr-banner .sep { opacity: .45; }
+    .gr-banner span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+    .gr-banner.ok { background: #EDF9F2; border-color: #B9E6CC; color: #14583A; }
+    .gr-banner.ok .ttl i { color: #1E9E63; }
+    .gr-banner.closed { background: #FFF6E5; border-color: #F2D49B; color: #7A4F00; }
+    .gr-banner.closed .ttl i { color: #C98500; }
+    #lookupGrid { height: 56vh; }
+    .gr-lookup-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .gr-lookup-filter label { margin: 0; font-weight: 600; font-size: 12.5px; }
+    .gr-lookup-filter input { height: 32px; border: 1.5px solid #D0D6DE; border-radius: 8px; padding: 0 8px; font-size: 12.5px; }
+    @@media (max-width: 600px) { .gr-form { grid-template-columns: 1fr; } .gr-banner-slot { grid-column: auto; } }
+</style>
+
+<section class="content">
+    <div class="row">
+        <div class="col-xs-12">
+            <div class="dp-card">
+                <div class="box-header dp-toolbar">
+                    <div class="dp-toolbar-left">
+                        <button type="button" class="dp-btn dp-btn-outline" id="btn_new"><i class="fa fa-file-o"></i> New</button>
+                        <button type="button" class="dp-btn dp-btn-outline" id="btn_find"><i class="fa fa-search"></i> Find GRN</button>
+                        @if ((bool)ViewData["Save"])
+                        {
+                            <button type="button" class="dp-btn dp-btn-primary" id="btn_save"><i class="fa fa-save"></i> Save</button>
+                        }
+                        @if ((bool)ViewData["Delete"])
+                        {
+                            <button type="button" class="dp-btn dp-btn-outline" id="btn_delete" style="color:#C62828"><i class="fa fa-trash-o"></i> Delete</button>
+                        }
+                    </div>
+                    <div class="dp-toolbar-right">
+                        <button type="button" class="dp-btn dp-btn-outline" id="btn_printGrn"><i class="fa fa-print"></i> Print GRN</button>
+                    </div>
+                </div>
+
+                <div class="gr-form">
+                    <div>
+                        <label for="txtDn">Delivery Note <span class="text-red">*</span></label>
+                        <input type="text" id="txtDn" class="gr-dn" placeholder="Scan / type DN then Enter" autocomplete="off" />
+                    </div>
+                    <div>
+                        <label for="txtSuratJalan">Supplier Delivery Note</label>
+                        <input type="text" id="txtSuratJalan" maxlength="30" autocomplete="off" />
+                    </div>
+                    <div>
+                        <label for="dtReceive">Receive Date <span class="text-red">*</span></label>
+                        <input type="text" class="js-date" id="dtReceive" />
+                    </div>
+                    <div>
+                        <label for="txtNoseq">Receipt Number</label>
+                        <input type="text" id="txtNoseq" readonly />
+                    </div>
+                    <div>
+                        <label for="txtSupplier">Supplier</label>
+                        <input type="text" id="txtSupplier" readonly />
+                    </div>
+                    <div>
+                        <label for="txtPlant">Plant Code</label>
+                        <input type="text" id="txtPlant" readonly />
+                    </div>
+                    <div class="gr-banner-slot">
+                        <div class="gr-banner" id="grBanner" role="status" hidden></div>
+                    </div>
+                </div>
+                <div class="gr-detail-bar">
+                    <label class="gr-check" id="lblSelectAll"><input type="checkbox" id="chkSelectAll" /> Select detail item</label>
+                </div>
+
+                <div class="box-body">
+                    <div id="datagrid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="modal fade" id="modalLookup" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg" style="width:1000px;max-width:96vw;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title">Find Goods Receive (CKB)</h4>
+            </div>
+            <div class="modal-body">
+                <div class="gr-lookup-filter">
+                    <label for="lkFrom">Receive date</label>
+                    <input type="text" class="js-date" id="lkFrom" />
+                    <label for="lkTo">to</label>
+                    <input type="text" class="js-date" id="lkTo" />
+                    <button type="button" class="dp-btn dp-btn-outline" id="btn_lookupShow"><i class="fa fa-search"></i> Show</button>
+                </div>
+                <div id="lookupGrid"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+    var gCanSave = @Json.Serialize((bool)ViewData["Save"]);
+    var gMode = "NEW";        // NEW = input DN baru, VIEW = GRN tersimpan
+    var gClosed = false;
+    var gRows = [];
+    var gLoading = false;     // sedang mengambil data DN
+    var gReceive = null;      // GRN yang sedang dibuka (untuk banner status)
+
+    function today() {
+        return moment().format("YYYY-MM-DD");
+    }
+
+    function computeGridHeight() {
+        return Math.max(240, $(window).height() - $("#datagrid").offset().top - 30);
+    }
+
+    $(document).ready(function () {
+        $("#datagrid").dxDataGrid({
+            dataSource: [],
+            keyExpr: "KEYCODE",
+            showBorders: true,
+            columnAutoWidth: true,
+            allowColumnResizing: true,
+            noDataText: "Scan or type a Delivery Note.",
+            height: computeGridHeight(),
+            paging: { enabled: false },
+            editing: { mode: "cell", allowUpdating: function () { return gMode == "NEW"; } },
+            onEditorPreparing: function (e) {
+                if (e.parentType == "dataRow" && e.dataField == "QTY") {
+                    e.editorOptions.min = 1;
+                    e.editorOptions.max = e.row.data.KBNORDTPC;
+                }
+            },
+            onCellPrepared: function (e) {
+                if (e.rowType != "data") { return; }
+                if (e.column.dataField == "QTY" && gMode == "NEW") { e.cellElement.addClass("gr-actual-edit"); }
+                if (e.column.dataField == "RECEIVE") { e.cellElement.addClass("gr-receive"); }
+            },
+            onRowUpdated: function () {
+                syncSelectAll();
+            },
+            onRowValidating: function (e) {
+                var qty = e.newData.QTY;
+                if (qty !== undefined) {
+                    var max = e.oldData.KBNORDTPC;
+                    if (qty > max) {
+                        e.isValid = false;
+                        e.errorText = "Receive qty cannot exceed the remaining qty (" + max + ")";
+                    } else if (qty <= 0) {
+                        e.isValid = false;
+                        e.errorText = "Cannot receive 0 quantity";
+                    }
+                }
+            },
+            columns: [
+                {
+                    caption: "No",
+                    width: 50,
+                    alignment: "center",
+                    allowEditing: false,
+                    cellTemplate: function (container, options) { container.text(options.row.rowIndex + 1); }
+                },
+                { dataField: "PARTNO", caption: "Part Number", allowEditing: false },
+                { dataField: "PAMPNM", caption: "Part Name", allowEditing: false },
+                { dataField: "PAMUNO", caption: "Unique No", allowEditing: false },
+                { dataField: "KANBANNO", caption: "Kanban No", allowEditing: false },
+                { dataField: "KEYCODE", caption: "Key Code", allowEditing: false },
+                { dataField: "KBNORDTPC", caption: "Order Qty", dataType: "number", allowEditing: false },
+                {
+                    // Qty yang benar-benar diterima; kurang dari Order Qty = terima sebagian (sisa -> DN#n)
+                    dataField: "QTY",
+                    caption: "Actual Qty",
+                    dataType: "number",
+                    validationRules: [{ type: "required" }, { type: "range", min: 1 }],
+                    setCellValue: function (newData, value) {
+                        newData.QTY = value;
+                        newData.RECEIVE = true;
+                    }
+                },
+                {
+                    dataField: "RECEIVE",
+                    caption: "Receive",
+                    dataType: "boolean",
+                    width: 80,
+                    alignment: "center"
+                }
+            ]
+        });
+
+        $("#txtDn").on("keydown", function (e) {
+            if (e.key == "Enter") {
+                e.preventDefault();
+                loadDn();
+            }
+        });
+
+        $("#btn_new").on("click", doNew);
+        $("#chkSelectAll").on("change", function () { selectAll(this.checked); });
+        $("#btn_save").on("click", onSave);
+        $("#btn_delete").on("click", onDelete);
+        $("#btn_find").on("click", openLookup);
+        $("#btn_printGrn").on("click", function () {
+            var noseq = $("#txtNoseq").val();
+            if (!noseq) { showErrorMesgGrowl("Please open a saved GRN first"); return; }
+            window.open("@Url.Action("Grn", "Print")?noseq=" + encodeURIComponent(noseq), "_blank");
+        });
+
+        $(window).on("resize", function () {
+            fitGrid();
+        });
+
+        doNew();
+    });
+
+    function grid() {
+        return $("#datagrid").dxDataGrid("instance");
+    }
+
+    function gridRows() {
+        return grid().option("dataSource") || [];
+    }
+
+    // "Select detail item": centang / kosongkan Receive semua baris (hanya saat input baru)
+    function selectAll(checked) {
+        if (gMode != "NEW") { return; }
+        var g = grid();
+        g.saveEditData().then(function () {
+            $.each(gridRows(), function (i, r) { r.RECEIVE = checked; });
+            g.refresh();
+        });
+    }
+
+    // Checkbox "Select detail item" ikut tercentang kalau semua baris sudah dicentang Receive
+    function syncSelectAll() {
+        var rows = gridRows();
+        $("#chkSelectAll").prop("checked", rows.length > 0 && rows.every(function (r) { return r.RECEIVE === true; }));
+    }
+
+    function esc(s) {
+        return $("<div>").text(s == null ? "" : s).html();
+    }
+
+    // Banner status GRN tersimpan: DN sudah diterima (hijau) atau sudah closed karena DN sisa dibuat (oranye)
+    function renderBanner() {
+        var $b = $("#grBanner");
+        if (gMode != "VIEW" || !gReceive) {
+            $b.attr("hidden", true).empty();
+            return;
+        }
+
+        var rows = gReceive.rows;
+        var first = rows[0];
+        var pcs = rows.reduce(function (sum, r) { return sum + (r.QTY || 0); }, 0);
+        var partial = rows.filter(function (r) { return r.QTY < r.KBNORDTPC; }).length;
+
+        var closed = !!gReceive.remainingDn;
+        var parts = [
+            '<span class="ttl"><i class="fa ' + (closed ? "fa-lock" : "fa-check-circle") + '"></i> '
+                + (closed ? "Received &middot; Closed" : "Received") + '</span>',
+            '<span>' + (partial > 0 ? partial + " partial" : "Full receive") + ' &middot; '
+                + rows.length + ' kanban &middot; ' + pcs.toLocaleString("en-US") + ' pcs</span>',
+            '<span><i class="fa fa-user"></i> ' + esc(first.INPUTUSER || "-")
+                + (first.INPUTDATE ? ", " + moment(first.INPUTDATE).format("YYYY-MM-DD HH:mm") : "") + '</span>'
+        ];
+        if (closed) {
+            parts.push('<span>Remaining DN <b>' + esc(gReceive.remainingDn) + '</b> created</span>');
+        }
+
+        $b.attr("class", "gr-banner " + (closed ? "closed" : "ok"))
+            .attr("title", closed ? "This GRN can no longer be deleted because the remaining Delivery Note has been created" : "")
+            .html(parts.join('<span class="sep">|</span>'))
+            .removeAttr("hidden");
+    }
+
+    function setStatus() {
+        renderBanner();
+
+        var viewMode = gMode == "VIEW";
+        $("#btn_save").prop("disabled", viewMode || !gCanSave);
+        $("#btn_delete").prop("disabled", !viewMode || gClosed);
+        $("#btn_printGrn").prop("disabled", !viewMode);
+        $("#txtDn, #txtSuratJalan, #dtReceive").prop("readonly", viewMode);
+        // "Select detail item" hanya relevan saat input baru
+        $(".gr-detail-bar").toggle(!viewMode);
+        fitGrid();
+    }
+
+    // Grid mengisi sisa layar tanpa membuat halaman ber-scroll: pasang tinggi perkiraan,
+    // lalu kurangi sebesar kelebihan tinggi dokumen terhadap jendela browser.
+    function fitGrid() {
+        var g = grid();
+        g.option("height", computeGridHeight());
+        var overflow = document.documentElement.scrollHeight - window.innerHeight;
+        if (overflow > 0) {
+            g.option("height", Math.max(240, g.option("height") - overflow - 2));
+        }
+    }
+
+    function doNew() {
+        gMode = "NEW";
+        gClosed = false;
+        gReceive = null;
+        $("#txtDn, #txtSuratJalan, #txtNoseq, #txtSupplier, #txtPlant").val("");
+        $("#dtReceive").val(today());
+        grid().option("dataSource", []);
+        syncSelectAll();
+        setStatus();
+        $("#txtDn").prop("readonly", false).focus();
+    }
+
+    function loadDn() {
+        var dn = $.trim($("#txtDn").val());
+        if (gLoading || $("#txtDn").prop("readonly")) { return; }
+        if (dn == "") {
+            showErrorMesgGrowl("Delivery Note should not be empty");
+            $("#txtDn").val("").focus();
+            return;
+        }
+
+        // Pencarian DN bisa beberapa detik (OLKKBNORD besar), tampilkan loading & cegah Enter dobel
+        gLoading = true;
+        popUpProgressShow();
+        $.ajax({
+            type: "POST",
+            url: "@Url.Action("GetDn", "GoodsReceiving")",
+            data: { dn: dn }
+        }).always(function () {
+            gLoading = false;
+            popUpProgressHide();
+        }).fail(function () {
+            showErrorMesgGrowl("Failed to load Delivery Note " + dn);
+            $("#txtDn").val("").focus();
+        }).done(function (result) {
+            if (result.status != true) {
+                showErrorMesgGrowl("DN " + dn + ": " + String(result.message || "").replace(/^ERROR:\s*/, ""));
+                grid().option("dataSource", []);
+                // DN salah / tidak ditemukan: kosongkan isian supaya scan berikutnya tidak menumpuk
+                $("#txtSupplier, #txtPlant").val("");
+                $("#txtDn").val("").focus();
+                return;
+            }
+
+            // Default seperti desktop: Actual Qty = Order Qty, Receive belum dicentang
+            var rows = result.data.map(function (r) { r.RECEIVE = false; return r; });
+            var first = rows[0];
+            $("#txtSupplier").val(first.SUPSCD + " - " + first.SUPNAM);
+            $("#txtPlant").val(first.PLCPCD);
+            if (first.SOCPRD) { $("#dtReceive").val(moment(first.SOCPRD).format("YYYY-MM-DD")); }
+            $("#txtDn").prop("readonly", true);
+
+            grid().option("dataSource", rows);
+            syncSelectAll();
+            $("#txtSuratJalan").focus();
+        });
+    }
+
+    function onSave() {
+        var g = grid();
+        g.saveEditData().then(function () {
+            if (g.hasEditData()) {
+                showErrorMesgGrowl("Please fix the invalid receive qty first");
+                return;
+            }
+
+            var selected = (g.option("dataSource") || []).filter(function (r) { return r.RECEIVE === true; });
+            if (selected.length == 0) { showErrorMesgGrowl("Please select detail item"); return; }
+            if (!$("#dtReceive").val()) { showErrorMesgGrowl("Please fill receive date"); return; }
+            if (selected.some(function (r) { return !(r.QTY > 0); })) { showErrorMesgGrowl("Cannot receive 0 quantity"); return; }
+
+            var payload = {
+                DELIVERYNOTE: $.trim($("#txtDn").val()),
+                SURATJALAN: $.trim($("#txtSuratJalan").val()),
+                TRANSDATE: $("#dtReceive").val(),
+                ITEMS: selected.map(function (r) {
+                    return { PARTNO: r.PARTNO, KANBANNO: r.KANBANNO, KEYCODE: r.KEYCODE, QTY: r.QTY };
+                })
+            };
+
+            var total = gridRows().length;
+            var partial = selected.filter(function (r) { return r.QTY < r.KBNORDTPC; }).length;
+            var notReceived = total - selected.length;
+            var info = selected.length + " of " + total + " kanban received";
+            if (partial > 0) { info += ", " + partial + " partial"; }
+            if (partial > 0 || notReceived > 0) { info += ". Remaining qty will be moved to a new Delivery Note"; }
+
+            showConfirmMesg("Save goods receive for DN " + $("<div>").text(payload.DELIVERYNOTE).html() + "?<br>" + info + ".", function () {
+                popUpProgressShow();
+                $.ajax({
+                    type: "POST",
+                    url: "@Url.Action("Save", "GoodsReceiving")",
+                    contentType: "application/json",
+                    data: JSON.stringify(payload)
+                }).always(function () {
+                    // Ditutup sebelum handler done supaya loading loadReceive di bawah tidak ikut tertutup
+                    popUpProgressHide();
+                }).done(function (result) {
+                    if (result.status != true) {
+                        showErrorMesgGrowl(result.message);
+                        return;
+                    }
+
+                    showSuccessMesgGrowl(result.message);
+                    loadReceive(result.data.NOSEQ);
+
+                    if (result.data.NEW_DN) {
+                        showConfirmMesg("New Delivery Note " + result.data.NEW_DN + " has been created. Do you want to print now?", function () {
+                            window.open("@Url.Action("Dn", "Print")?dn=" + encodeURIComponent(result.data.NEW_DN), "_blank");
+                        }, "Confirmation");
+                    }
+                }).fail(function () {
+                    showErrorMesgGrowl("Failed to save data");
+                });
+            }, "Confirmation");
+        });
+    }
+
+    function loadReceive(noseq) {
+        popUpProgressShow();
+        $.ajax({
+            type: "POST",
+            url: "@Url.Action("GetReceive", "GoodsReceiving")",
+            data: { noseq: noseq }
+        }).always(function () {
+            popUpProgressHide();
+        }).fail(function () {
+            showErrorMesgGrowl("Failed to load " + noseq);
+        }).done(function (result) {
+            if (result.status != true) {
+                showErrorMesgGrowl(result.message);
+                return;
+            }
+
+            var first = result.data[0];
+            gMode = "VIEW";
+            gClosed = result.closed;
+            gReceive = { rows: result.data, remainingDn: result.remainingDn };
+            $("#txtNoseq").val(first.NOSEQ);
+            $("#txtDn").val(first.DELIVERYNOTE);
+            $("#txtSuratJalan").val(first.SURATJALAN);
+            $("#dtReceive").val(first.TRANSDATE ? moment(first.TRANSDATE).format("YYYY-MM-DD") : "");
+            $("#txtSupplier").val(first.SUPSCD + " - " + first.SUPNAM);
+            $("#txtPlant").val(first.PLCPCD);
+            // GRN tersimpan: semua baris memang diterima
+            grid().option("dataSource", result.data.map(function (r) { return $.extend({ RECEIVE: true }, r); }));
+            syncSelectAll();
+            setStatus();
+        });
+    }
+
+    function onDelete() {
+        var noseq = $("#txtNoseq").val();
+        if (!noseq) { return; }
+
+        showConfirmMesg("Are you sure you want to delete " + noseq + "?", function () {
+            popUpProgressShow();
+            $.ajax({
+                type: "POST",
+                url: "@Url.Action("Delete", "GoodsReceiving")",
+                data: { noseq: noseq }
+            }).always(function () {
+                popUpProgressHide();
+            }).done(function (result) {
+                if (result.status == true) {
+                    showSuccessMesgGrowl(result.message);
+                    doNew();
+                } else {
+                    showErrorMesgGrowl(result.message);
+                }
+            }).fail(function () {
+                showErrorMesgGrowl("Failed to delete data");
+            });
+        }, "Confirmation");
+    }
+
+    function openLookup() {
+        $("#modalLookup").modal("show");
+
+        var $grid = $("#lookupGrid");
+        if (!$grid.data("dxDataGrid")) {
+            $("#lkFrom").val(moment().subtract(3, "months").format("YYYY-MM-DD"));
+            $("#lkTo").val(today());
+            $("#btn_lookupShow").on("click", function () { $grid.dxDataGrid("instance").refresh(); });
+
+            $grid.dxDataGrid({
+                dataSource: new DevExpress.data.CustomStore({
+                    loadMode: "raw",
+                    load: function () {
+                        // daftar GRN bisa beberapa detik: tampilkan loading yang sama dengan proses lain
+                        popUpProgressShow();
+                        return $.post("@Url.Action("Lookup", "GoodsReceiving")", { from: $("#lkFrom").val(), to: $("#lkTo").val() }).always(function () {
+                            popUpProgressHide();
+                        }).then(function (result) {
+                            if (result.status != true) { showErrorMesgGrowl(result.message); return []; }
+                            return result.data;
+                        }, function () {
+                            showErrorMesgGrowl("Failed to load data");
+                            return $.Deferred().resolve([]).promise();
+                        });
+                    }
+                }),
+                showBorders: true,
+                columnAutoWidth: true,
+                filterRow: { visible: true },
+                toolbar: { visible: false },
+                paging: { pageSize: 20 },
+                pager: { visible: true, displayMode: "compact", showPageSizeSelector: true, allowedPageSizes: [20, 50, 100], showInfo: true, showNavigationButtons: true },
+                hoverStateEnabled: true,
+                noDataText: "Data not found.",
+                columns: [
+                    { dataField: "NOSEQ", caption: "Receipt Number" },
+                    { dataField: "DELIVERYNOTE", caption: "Delivery Note" },
+                    { dataField: "TRANSDATE", caption: "Receive Date", dataType: "date", format: "yyyy-MM-dd" },
+                    { dataField: "SURATJALAN", caption: "Supplier DN" },
+                    { dataField: "PLCPCD", caption: "Plant" },
+                    { dataField: "SUPSCD", caption: "Supplier Code" },
+                    { dataField: "SUPNAM", caption: "Supplier Name" },
+                    { dataField: "INPUTUSER", caption: "Input By" },
+                    { dataField: "INPUTDATE", caption: "Input Date", dataType: "datetime", format: "yyyy-MM-dd HH:mm" }
+                ],
+                onRowClick: function (e) {
+                    if (e.rowType != "data") { return; }
+                    $("#modalLookup").modal("hide");
+                    loadReceive(e.data.NOSEQ);
+                }
+            });
+        } else {
+            $grid.dxDataGrid("instance").refresh();
+        }
+    }
+</script>

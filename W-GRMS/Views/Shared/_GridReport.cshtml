@@ -1,0 +1,164 @@
+@using GRMS.Common.Controllers
+@model GridReportPage
+@{
+    string ctrl = Model.Controller;
+}
+<link rel="stylesheet" href="~/css/devextreme/dx.light.css" />
+<script src="~/js/devextreme/dx.web.js"></script>
+
+<style>
+    .tr-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .tr-filter label { margin: 0; font-weight: 600; font-size: 12.5px; }
+    .tr-filter select, .tr-filter input { height: 34px; border: 1.5px solid #D0D6DE; border-radius: 8px; padding: 0 8px; font-size: 12.5px; }
+    .tr-filter select { min-width: 160px; }
+</style>
+
+<section class="content">
+    <div class="row">
+        <div class="col-xs-12">
+            <div class="dp-card">
+                <div class="box-header dp-toolbar">
+                    <div class="dp-toolbar-left tr-filter">
+                        <label for="cboPlant">Plant</label>
+                        <select id="cboPlant">
+                            @if (Model.PlantOptional)
+                            {
+                                <option value="">All plant</option>
+                            }
+                            @foreach (var p in Model.Plants)
+                            {
+                                <option value="@p.PlantCode">@p.PlantCode - @p.PlantName</option>
+                            }
+                        </select>
+                        @if (Model.FilterOptions.Count > 0)
+                        {
+                            <label for="cboFilterBy">Filter by</label>
+                            <select id="cboFilterBy">
+                                @foreach (var f in Model.FilterOptions)
+                                {
+                                    <option value="@f.Key">@f.Value</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <label>@Model.PeriodLabel</label>
+                        }
+                        <input type="text" class="js-date" id="dtFrom" aria-label="Period from" />
+                        <label for="dtTo">to</label>
+                        <input type="text" class="js-date" id="dtTo" />
+                        <button type="button" class="dp-btn dp-btn-primary" id="btn_search"><i class="fa fa-search"></i> Show</button>
+                    </div>
+                    <div class="dp-toolbar-right">
+                        <button type="button" class="dp-btn dp-btn-outline" id="btn_export"><i class="fa fa-download"></i> Export</button>
+                        <button type="button" class="dp-icon-btn" id="btn_columns" title="Show/Hide Columns"><i class="fa fa-cog"></i></button>
+                    </div>
+                </div>
+                <div class="box-body">
+                    <div id="datagrid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script type="text/javascript">
+    var gColumns = @Json.Serialize(Model.Columns);
+    var gLoaded = false;
+
+    function computeGridHeight() {
+        // sisa di bawah grid = border kartu + padding bawah halaman (~33px)
+        return Math.max(300, $(window).height() - $("#datagrid").offset().top - 36);
+    }
+
+    function filter() {
+        return {
+            PlantCode: $("#cboPlant").val(),
+            FilterBy: $("#cboFilterBy").val() || "",
+            From: $("#dtFrom").val(),
+            To: $("#dtTo").val()
+        };
+    }
+
+    function toGridColumn(c) {
+        var col = { dataField: c.Field, caption: c.Caption };
+        if (c.Type == "number") {
+            col.dataType = "number";
+        } else if (c.Type == "date") {
+            col.dataType = "date";
+            col.format = "yyyy-MM-dd";
+        } else if (c.Type == "datetime") {
+            col.dataType = "datetime";
+            col.format = "yyyy-MM-dd HH:mm:ss";
+        }
+        return col;
+    }
+
+    $(document).ready(function () {
+        $("#dtFrom").val(moment().startOf("month").format("YYYY-MM-DD"));
+        $("#dtTo").val(moment().format("YYYY-MM-DD"));
+
+        var columns = [{
+            caption: "No",
+            width: 55,
+            alignment: "center",
+            allowFiltering: false,
+            allowHiding: false,
+            cellTemplate: function (container, options) {
+                container.text(options.component.pageIndex() * options.component.pageSize() + options.row.rowIndex + 1);
+            }
+        }].concat(gColumns.map(toGridColumn));
+
+        $("#datagrid").dxDataGrid({
+            dataSource: new DevExpress.data.CustomStore({
+                loadMode: "raw",
+                load: function () {
+                    if (!gLoaded) { return []; }
+                    popUpProgressShow();
+                    return $.post("@Url.Action("Search", ctrl)", filter()).then(function (result) {
+                        popUpProgressHide();
+                        if (result.status != true) { showErrorMesgGrowl(result.message); return []; }
+                        return result.data;
+                    }, function () {
+                        popUpProgressHide();
+                        showErrorMesgGrowl("Failed to load data");
+                        return [];
+                    });
+                }
+            }),
+            showBorders: true,
+            columnAutoWidth: true,
+            allowColumnResizing: true,
+            columnResizingMode: "widget",
+            noDataText: "Select the filter then click Show.",
+            height: computeGridHeight(),
+            filterRow: { visible: true, applyFilter: "auto" },
+            headerFilter: { visible: true },
+            toolbar: { visible: false },
+            paging: { pageSize: 50 },
+            pager: { visible: true, displayMode: "compact", showPageSizeSelector: true, allowedPageSizes: [25, 50, 100, 200], showInfo: true, showNavigationButtons: true },
+            columnChooser: { enabled: true, mode: "select" },
+            summary: {
+                totalItems: [{ column: gColumns.length ? gColumns[0].Field : "", summaryType: "count", displayFormat: "{0} rows" }]
+            },
+            columns: columns
+        });
+
+        $("#btn_search").on("click", function () {
+            gLoaded = true;
+            $("#datagrid").dxDataGrid("instance").refresh();
+        });
+
+        $("#btn_columns").on("click", function () {
+            $("#datagrid").dxDataGrid("instance").showColumnChooser();
+        });
+
+        $("#btn_export").on("click", function () {
+            window.location.href = "@Url.Action("DownloadExcel", ctrl)?" + $.param(filter());
+        });
+
+        $(window).on("resize", function () {
+            $("#datagrid").dxDataGrid("instance").option("height", computeGridHeight());
+        });
+    });
+</script>

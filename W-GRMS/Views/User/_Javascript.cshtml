@@ -1,0 +1,172 @@
+<script type="text/javascript">
+    var screenMode = "ADD";
+
+    $(document).ready(function () {
+        loadFormOptions();
+
+        $("#addEditRoleId").select2({ dropdownParent: $("#modalAddEdit"), placeholder: "Select role" });
+        $("#addEditPlants").select2({ dropdownParent: $("#modalAddEdit"), placeholder: "Select receiving areas", closeOnSelect: false, width: "100%" });
+
+        $("#btn_add").on("click", function () {
+            onAddPrepare();
+        });
+
+        $("#btn_save").on("click", function () {
+            onSave();
+        });
+    });
+
+    function loadFormOptions() {
+        $.ajax({
+            type: "POST",
+            url: "@Url.Action("GetFormOptions", "User")"
+        }).done(function (result) {
+            if (result.status != true) {
+                showErrorMesgGrowl(result.message);
+                return;
+            }
+
+            var $role = $("#addEditRoleId").empty().append(new Option("", "", false, false));
+            $.each(result.roles, function (i, r) {
+                $role.append(new Option(r.text + " (" + r.id + ")", r.id, false, false));
+            });
+
+            // pilihan Receiving Area dari master (TB_M_RECEIVING_AREA); nilai yang sudah terpilih dipertahankan
+            var selected = getPlants();
+            var $plant = $("#addEditPlants").empty();
+            $.each(result.areas, function (i, a) {
+                $plant.append(new Option(a.text, a.id, false, false));
+            });
+            setPlants(selected.join(","));
+        });
+    }
+
+    // Receiving Area user: kode area yang belum ada di master (data lama) tetap ditampilkan supaya tidak hilang saat disimpan
+    function setPlants(plantsCsv) {
+        var $plant = $("#addEditPlants");
+        var values = plantsCsv ? plantsCsv.split(",").map(function (x) { return x.trim(); }).filter(function (x) { return x != ""; }) : [];
+        $.each(values, function (i, v) {
+            if ($plant.find("option").filter(function () { return this.value == v; }).length == 0) {
+                $plant.append(new Option(v + " (not in master)", v, false, false));
+            }
+        });
+        $plant.val(values).trigger("change");
+    }
+
+    function getPlants() {
+        return $("#addEditPlants").val() || [];
+    }
+
+    function clearForm() {
+        $("#addEditUserId, #addEditNik, #addEditUserName, #addEditDept, #addEditEmail, #addEditPhone, #addEditPassword, #addEditConfirmPassword").val("");
+        $("#addEditRoleId").val("").trigger("change");
+        setPlants("");
+    }
+
+    function onAddPrepare() {
+        screenMode = "ADD";
+        clearForm();
+        $("#addEditUserId").prop("readonly", false);
+        $("#modal-title").text("Add User");
+        $("#passwordHint").text("Leave empty to use the User ID as initial password.");
+        $("#modalAddEdit").modal("show");
+    }
+
+    function onEditPrepare(row) {
+        screenMode = "EDIT";
+        clearForm();
+
+        withLoading($.ajax({
+            type: "POST",
+            url: "@Url.Action("GetByKey", "User")",
+            data: { USER_ID: row.USER_ID }
+        })).done(function (result) {
+            if (result.status != true || result.data == null) {
+                showErrorMesgGrowl(result.message || "Data not found");
+                return;
+            }
+
+            var d = result.data;
+            $("#addEditUserId").val(d.USER_ID).prop("readonly", true);
+            $("#addEditNik").val(d.NIK);
+            $("#addEditUserName").val(d.USER_NAME);
+            $("#addEditDept").val(d.DEPT);
+            $("#addEditEmail").val(d.EMAIL);
+            $("#addEditPhone").val(d.PHONE);
+            $("#addEditRoleId").val(d.ROLE_ID).trigger("change");
+            setPlants(d.PLANTS);
+
+            $("#modal-title").text("Edit User");
+            $("#passwordHint").text("Fill only to reset the password (new expiry: 3 months).");
+            $("#modalAddEdit").modal("show");
+        });
+    }
+
+    function onSave() {
+        var data = {
+            screenMode: screenMode,
+            USER_ID: $.trim($("#addEditUserId").val()),
+            NIK: $.trim($("#addEditNik").val()),
+            USER_NAME: $.trim($("#addEditUserName").val()),
+            DEPT: $.trim($("#addEditDept").val()),
+            EMAIL: $.trim($("#addEditEmail").val()),
+            PHONE: $.trim($("#addEditPhone").val()),
+            ROLE_ID: $("#addEditRoleId").val(),
+            PLANTS: getPlants().join(","),
+            PASSWORD: $("#addEditPassword").val(),
+            CONFIRM_PASSWORD: $("#addEditConfirmPassword").val()
+        };
+
+        if (data.USER_ID == "") { showErrorMesgGrowl("User ID should not be empty"); return; }
+        if (data.USER_NAME == "") { showErrorMesgGrowl("Name should not be empty"); return; }
+        if (!data.ROLE_ID) { showErrorMesgGrowl("Role should not be empty"); return; }
+        if (data.PASSWORD != data.CONFIRM_PASSWORD) { showErrorMesgGrowl("Confirm password does not match"); return; }
+
+        showConfirmMesg("Are you sure you want to save this data?", function () {
+            $.ajax({
+                type: "POST",
+                url: "@Url.Action("AddEdit", "User")",
+                data: data
+            }).done(function (result) {
+                if (result.status == true) {
+                    showSuccessMesgGrowl(result.message);
+                    $("#modalAddEdit").modal("hide");
+                    refreshGrid();
+                } else {
+                    showErrorMesgGrowl(result.message);
+                }
+            }).fail(function () {
+                showErrorMesgGrowl("Failed to save data");
+            });
+        }, "Confirmation");
+    }
+
+    function onDeletePrepare(row) {
+        showConfirmMesg("Deactivate user " + row.USER_ID + " - " + row.USER_NAME + "?", function () {
+            postAction("@Url.Action("Delete", "User")", row.USER_ID);
+        }, "Confirmation");
+    }
+
+    function onRestorePrepare(row) {
+        showConfirmMesg("Restore user " + row.USER_ID + " - " + row.USER_NAME + "?", function () {
+            postAction("@Url.Action("Restore", "User")", row.USER_ID);
+        }, "Confirmation");
+    }
+
+    function postAction(url, userId) {
+        $.ajax({
+            type: "POST",
+            url: url,
+            data: { USER_ID: userId }
+        }).done(function (result) {
+            if (result.status == true) {
+                showSuccessMesgGrowl(result.message);
+                refreshGrid();
+            } else {
+                showErrorMesgGrowl(result.message);
+            }
+        }).fail(function () {
+            showErrorMesgGrowl("Failed to process data");
+        });
+    }
+</script>

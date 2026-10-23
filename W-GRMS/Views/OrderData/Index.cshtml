@@ -1,0 +1,296 @@
+@using GRMS.Models
+@{
+    var plants = (List<CkbSourceOptions>)ViewData["Plants"];
+}
+<link rel="stylesheet" href="~/css/devextreme/dx.light.css" />
+<script src="~/js/devextreme/dx.web.js"></script>
+
+<style>
+    .tr-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .tr-filter label { margin: 0; font-weight: 600; font-size: 12.5px; }
+    .tr-filter select, .tr-filter input { height: 34px; border: 1.5px solid #D0D6DE; border-radius: 8px; padding: 0 8px; font-size: 12.5px; }
+    .tr-filter select { min-width: 200px; }
+
+    .dl-box { font-size: 13px; }
+    .dl-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
+    .dl-row span, .dl-stats span { color: #6B7280; }
+    .dl-stage { font-weight: 600; margin-bottom: 6px; }
+    .dl-track { height: 10px; background: #E5E9F0; border-radius: 5px; overflow: hidden; position: relative; }
+    .dl-bar { height: 100%; width: 0; background: #2450C8; border-radius: 5px; transition: width .4s; }
+    .dl-bar.dl-indeterminate { width: 35% !important; position: absolute; animation: dl-slide 1.2s ease-in-out infinite; }
+    @@keyframes dl-slide { 0% { left: -35%; } 100% { left: 100%; } }
+    .dl-stats { display: flex; justify-content: space-between; margin-top: 12px; }
+    .dl-stats div { display: flex; flex-direction: column; }
+    .dl-stats b { font-size: 15px; }
+    .dl-result { margin-top: 12px; padding: 8px 10px; border-radius: 6px; word-break: break-word; }
+    .dl-result.dl-ok { background: #E8F5E9; color: #1B5E20; }
+    .dl-result.dl-err { background: #FDECEA; color: #B71C1C; }
+    .dl-foot { text-align: right; margin-top: 12px; }
+</style>
+
+<section class="content">
+    <div class="row">
+        <div class="col-xs-12">
+            <div class="dp-card">
+                <div class="box-header dp-toolbar">
+                    <div class="dp-toolbar-left tr-filter">
+                        <label for="cboPlant">Plant</label>
+                        <select id="cboPlant">
+                            @foreach (var p in plants)
+                            {
+                                <option value="@p.PlantCode">@p.PlantCode - @p.PlantName</option>
+                            }
+                        </select>
+                        <label for="dtFrom">Receive plan</label>
+                        <input type="text" class="js-date" id="dtFrom" />
+                        <label for="dtTo">to</label>
+                        <input type="text" class="js-date" id="dtTo" />
+                        <button type="button" class="dp-btn dp-btn-outline" id="btn_refresh"><i class="fa fa-search"></i> Show</button>
+                        @if ((bool)ViewData["Download"])
+                        {
+                            <button type="button" class="dp-btn dp-btn-primary" id="btn_download"><i class="fa fa-cloud-download"></i> Download from CKB</button>
+                        }
+                    </div>
+                    <div class="dp-toolbar-right">
+                        <button type="button" class="dp-btn dp-btn-outline" id="btn_export"><i class="fa fa-download"></i> Export</button>
+                        <button type="button" class="dp-icon-btn" id="btn_columns" title="Show/Hide Columns"><i class="fa fa-cog"></i></button>
+                    </div>
+                </div>
+                <div class="box-body">
+                    <div id="datagrid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div id="dlPopup"></div>
+@* disembunyikan; isinya baru dipindah ke dalam popup saat popup pertama kali dibuka *@
+<div style="display:none">
+<div id="dlContent" class="dl-box">
+    <div class="dl-row"><span>Plant</span><b id="dlPlant">-</b></div>
+    <div class="dl-stage" id="dlStage">Connecting...</div>
+    <div class="dl-track"><div class="dl-bar" id="dlBar"></div></div>
+    <div class="dl-stats">
+        <div><span>Saved / found</span><b id="dlCount">-</b></div>
+        <div><span>Failed</span><b id="dlFailed">-</b></div>
+        <div><span>Elapsed</span><b id="dlElapsed">0s</b></div>
+    </div>
+    <div class="dl-result" id="dlResult"></div>
+    <div class="dl-foot">
+        <button type="button" class="dp-btn dp-btn-primary" id="dlClose" onclick="$('#dlPopup').dxPopup('instance').hide()">Close</button>
+    </div>
+</div>
+</div>
+
+<script type="text/javascript">
+    var gCanDelete = @Json.Serialize((bool)ViewData["Delete"]);
+    var gLoaded = false;
+
+    function computeGridHeight() {
+        // sisa di bawah grid = border kartu + padding bawah halaman (~33px)
+        return Math.max(300, $(window).height() - $("#datagrid").offset().top - 36);
+    }
+
+    function filter() {
+        return { plantCode: $("#cboPlant").val(), from: $("#dtFrom").val(), to: $("#dtTo").val() };
+    }
+
+    $(document).ready(function () {
+        $("#dtFrom").val(moment().startOf("month").format("YYYY-MM-DD"));
+        $("#dtTo").val(moment().format("YYYY-MM-DD"));
+
+        // Kolom & urutan sama dengan grid desktop (frmGetGoodsReceiveCKB)
+        var columns = [
+            { dataField: "PLCPCD", caption: "Plant Code" },
+            { dataField: "RACRAC", caption: "Receiving Area Code" },
+            { dataField: "SUPSCD", caption: "Supplier Code" },
+            { dataField: "SUPPCD", caption: "Supplier Plant Code" },
+            { dataField: "SUPSHD", caption: "Supplier Shipping Dock" },
+            { dataField: "SUPNAM", caption: "Supplier Name" },
+            { dataField: "SOCDNO", caption: "Delivery Note" },
+            { dataField: "SOCDNOORI", caption: "Original Delivery Note" },
+            { dataField: "PAMPNO", caption: "Part Number" },
+            { dataField: "PAMPNM", caption: "Part Name" },
+            { dataField: "PAMUNO", caption: "Unique No" },
+            { dataField: "PAMPCK", caption: "Pcs / Kanban", dataType: "number" },
+            { dataField: "KBNKCD", caption: "Key Code" },
+            { dataField: "KBNKNO", caption: "Kanban Number" },
+            { dataField: "KBNORDTPC", caption: "Qty Order", dataType: "number" },
+            { dataField: "RMNQTY", caption: "Remaining Qty", dataType: "number" },
+            { dataField: "SOCPOD", caption: "Order Date", calculateCellValue: function (r) { return formatYmd(r.SOCPOD); } },
+            { dataField: "SOCPOT", caption: "Order Time" },
+            { dataField: "SOCPOCS", caption: "Order Seq" },
+            { dataField: "SOCPRD", caption: "Planning Receive Date", calculateCellValue: function (r) { return formatYmd(r.SOCPRD); } },
+            { dataField: "SOCPRT", caption: "Planning Receive Time" },
+            { dataField: "SOCPRCS", caption: "Planning Receive Seq" }
+        ];
+
+        // kolom Action (hapus) di paling kiri seperti desktop
+        if (gCanDelete) {
+            columns.unshift({
+                caption: "Action",
+                width: 70,
+                alignment: "center",
+                allowFiltering: false,
+                allowHiding: false,
+                cellTemplate: function (container, options) {
+                    $("<button>").attr({ type: "button", title: "Delete" }).addClass("dp-act-kebab")
+                        .html('<i class="fa fa-trash-o" style="color:#C62828"></i>')
+                        .on("click", function () { onDelete(options.data); })
+                        .appendTo(container);
+                }
+            });
+        }
+
+        $("#datagrid").dxDataGrid({
+            dataSource: new DevExpress.data.CustomStore({
+                loadMode: "raw",
+                load: function () {
+                    if (!gLoaded) { return []; }
+                    return withLoading($.post("@Url.Action("Search", "OrderData")", filter())).then(function (result) {
+                        if (result.status != true) { showErrorMesgGrowl(result.message); return []; }
+                        return result.data;
+                    });
+                }
+            }),
+            showBorders: true,
+            columnAutoWidth: true,
+            allowColumnResizing: true,
+            columnResizingMode: "widget",
+            noDataText: "Select plant & period then click Show.",
+            height: computeGridHeight(),
+            filterRow: { visible: true, applyFilter: "auto" },
+            headerFilter: { visible: true },
+            toolbar: { visible: false },
+            paging: { pageSize: 50 },
+            pager: { visible: true, displayMode: "compact", showPageSizeSelector: true, allowedPageSizes: [25, 50, 100, 200], showInfo: true, showNavigationButtons: true },
+            columnChooser: { enabled: true, mode: "select" },
+            columnFixing: { enabled: true },
+            columns: columns
+        });
+
+        $("#btn_refresh").on("click", refreshGrid);
+
+        $("#btn_columns").on("click", function () {
+            $("#datagrid").dxDataGrid("instance").showColumnChooser();
+        });
+
+        $("#btn_export").on("click", function () {
+            window.location.href = "@Url.Action("DownloadExcel", "OrderData")?" + $.param(filter());
+        });
+
+        $("#btn_download").on("click", function () {
+            var plantText = $("#cboPlant option:selected").text();
+            showConfirmMesg("Download new order data for plant " + plantText + " from CKB?", function () {
+                $.ajax({
+                    type: "POST",
+                    url: "@Url.Action("Download", "OrderData")",
+                    data: { plantCode: $("#cboPlant").val() }
+                }).done(function (result) {
+                    if (result.status != true) { showErrorMesgGrowl(result.message); return; }
+                    if (result.running) {
+                        showErrorMesgGrowl("A download for this plant is already running (started by " + result.user + "). Showing its progress.");
+                    }
+                    openDownloadProgress(result.jobId);
+                }).fail(function () {
+                    showErrorMesgGrowl("Download failed");
+                });
+            }, "Confirmation");
+        });
+
+        $("#dlPopup").dxPopup({
+            title: "Download Order Data from CKB",
+            width: 460,
+            height: "auto",
+            showCloseButton: false,
+            dragEnabled: false,
+            hideOnOutsideClick: false,
+            contentTemplate: function () { return $("#dlContent"); }
+        });
+
+        $(window).on("resize", function () {
+            $("#datagrid").dxDataGrid("instance").option("height", computeGridHeight());
+        });
+    });
+
+    // Progres download: dipantau tiap detik sampai stage "done"
+    var gDlTimer = null;
+
+    function openDownloadProgress(jobId) {
+        $("#dlResult").hide().removeClass("dl-ok dl-err");
+        $("#dlClose").hide();
+        $("#dlBar").css("width", "0%").addClass("dl-indeterminate");
+        $("#dlCount, #dlFailed").text("-");
+        $("#dlStage").text("Connecting...");
+        $("#dlPopup").dxPopup("instance").show();
+        pollDownload(jobId);
+    }
+
+    function formatElapsed(s) {
+        var m = Math.floor(s / 60);
+        return (m > 0 ? m + "m " : "") + (s % 60) + "s";
+    }
+
+    function pollDownload(jobId) {
+        $.get("@Url.Action("DownloadProgress", "OrderData")", { jobId: jobId }).done(function (p) {
+            if (p.status != true) { finishDownload(false, p.message); return; }
+
+            $("#dlPlant").text(p.plant);
+            $("#dlElapsed").text(formatElapsed(p.elapsed));
+            $("#dlFailed").text(p.failed);
+
+            if (p.stage == "read") {
+                $("#dlStage").text("Reading new orders from CKB...");
+                $("#dlCount").text("-");
+            } else {
+                var processed = p.inserted + p.failed;
+                var pct = p.total > 0 ? Math.round(processed * 100 / p.total) : 100;
+                $("#dlBar").removeClass("dl-indeterminate").css("width", pct + "%");
+                $("#dlStage").text(p.stage == "done" ? "Finished" : "Saving to GRMS... " + pct + "%");
+                $("#dlCount").text(p.inserted + " / " + p.total);
+            }
+
+            if (p.stage == "done") {
+                finishDownload(p.result == true, p.message);
+            } else {
+                gDlTimer = setTimeout(function () { pollDownload(jobId); }, 1000);
+            }
+        }).fail(function () {
+            // koneksi ke web putus sebentar: coba lagi, proses di server tetap jalan
+            gDlTimer = setTimeout(function () { pollDownload(jobId); }, 3000);
+        });
+    }
+
+    function finishDownload(ok, message) {
+        $("#dlBar").removeClass("dl-indeterminate");
+        if (!ok && $("#dlBar")[0].style.width == "0%") { $("#dlBar").css("width", "100%"); }
+        $("#dlResult").text(message || "").addClass(ok ? "dl-ok" : "dl-err").show();
+        $("#dlClose").show();
+        refreshGrid();
+    }
+
+    function refreshGrid() {
+        gLoaded = true;
+        $("#datagrid").dxDataGrid("instance").refresh();
+    }
+
+    function onDelete(row) {
+        showConfirmMesg("Are you sure you want to delete DN " + row.SOCDNO + " (order " + formatYmd(row.SOCPOD) + " " + row.SOCPOT + ")?", function () {
+            $.ajax({
+                type: "POST",
+                url: "@Url.Action("Delete", "OrderData")",
+                data: { SOCDNO: row.SOCDNO, SOCPOD: row.SOCPOD, SOCPOT: row.SOCPOT }
+            }).done(function (result) {
+                if (result.status == true) {
+                    showSuccessMesgGrowl(result.message);
+                    refreshGrid();
+                } else {
+                    showErrorMesgGrowl(result.message);
+                }
+            }).fail(function () {
+                showErrorMesgGrowl("Delete failed");
+            });
+        }, "Confirmation");
+    }
+</script>

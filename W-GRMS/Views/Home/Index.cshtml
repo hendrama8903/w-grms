@@ -1,0 +1,471 @@
+@using GRMS.Models
+@using Microsoft.AspNetCore.Http
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+@{
+    var session = HttpContextAccessor.HttpContext.Session;
+    var plants = (List<CkbSourceOptions>)ViewData["Plants"];
+}
+<link rel="stylesheet" href="~/css/devextreme/dx.light.css" />
+@* grafik + grid popup detail: dx.web.js dan dx.viz.js tidak boleh dimuat bersamaan (E0024), jadi pakai bundle gabungan *@
+<script src="~/js/devextreme/dx.all.js"></script>
+
+<style>
+    .db-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0 14px; }
+    .db-head h3 { margin: 0; font-weight: 700; font-size: 18px; color: var(--ink); }
+    .db-head p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+    .db-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .db-filter label { margin: 0; font-weight: 600; font-size: 12.5px; color: var(--ink); }
+    .db-filter select, .db-filter input { height: 34px; border: 1.5px solid var(--line-2); border-radius: 8px; padding: 0 8px; font-size: 12.5px; background: var(--surface); }
+
+    /* kartu KPI: bisa diklik untuk melihat detail datanya */
+    .db-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .db-kpi {
+        background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+        box-shadow: var(--shadow); padding: 11px 14px; display: flex; flex-direction: column; gap: 3px; min-height: 0;
+        cursor: pointer; position: relative; transition: border-color .15s, box-shadow .15s, transform .15s;
+    }
+    .db-kpi:hover, .db-kpi:focus-visible { border-color: #2450D8; box-shadow: 0 4px 14px rgba(36,80,216,.12); transform: translateY(-1px); outline: none; }
+    .db-kpi .lbl { font-size: 11.5px; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+    .db-kpi .val { font-size: 23px; font-weight: 700; color: var(--ink); line-height: 1.1; }
+    .db-kpi .sub { font-size: 11px; color: var(--muted); }
+    .db-kpi .more { position: absolute; top: 10px; right: 12px; font-size: 11px; color: #98A2B3; transition: color .15s; }
+    .db-kpi:hover .more, .db-kpi:focus-visible .more { color: #2450D8; }
+    .db-kpi .flag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 20px; width: fit-content; }
+    .db-kpi .flag.bad { background: var(--merah-soft); color: var(--merah); }
+    .db-kpi .flag.ok { background: #E4F7EC; color: #1A7A4C; }
+
+    /* panel grafik */
+    .db-grid { display: grid; grid-template-columns: 3fr 2fr; gap: 12px; margin-bottom: 14px; }
+    .db-panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px 10px; min-width: 0; }
+    .db-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .db-panel h4 { margin: 0 0 2px; font-size: 14px; font-weight: 700; color: var(--ink); }
+    .db-panel .hint { margin: 0 0 6px; font-size: 11.5px; color: var(--muted); }
+    .db-panel .total { text-align: right; white-space: nowrap; }
+    .db-panel .total b { display: block; font-size: 20px; font-weight: 700; color: var(--ink); line-height: 1.1; }
+    .db-panel .total span { font-size: 11px; color: var(--muted); }
+    .db-chart-wrap { position: relative; }
+    .db-chart-wrap .dxc-series path, .db-chart-wrap .dxc-series rect { cursor: pointer; }
+    .db-chart-wrap.loading .db-chart { opacity: .5; transition: opacity .2s; }
+    .db-empty { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 6px; color: var(--muted); font-size: 12.5px; pointer-events: none; }
+    .db-empty i { font-size: 22px; color: #C3CCD8; }
+    .db-chart-wrap.empty .db-empty { display: flex; }
+    .db-chart-wrap.empty .db-chart { visibility: hidden; }
+    .db-clickhint { font-size: 11px; color: #98A2B3; margin-top: 2px; }
+
+    /* tooltip grafik: nilai di depan (tebal), keterangan menyusul */
+    .db-tip { font-family: inherit; padding: 2px 2px; }
+    .db-tip .v { font-size: 15px; font-weight: 700; color: #16212B; }
+    .db-tip .k { font-size: 12px; color: #475467; }
+    .db-tip .h { font-size: 11px; color: #2450D8; margin-top: 4px; }
+
+    /* popup detail */
+    #modalDetail .modal-dialog { width: 1100px; max-width: 96vw; }
+    #modalDetail .modal-content { border: none; border-radius: 14px; overflow: hidden; }
+    #modalDetail .dd-header { background: linear-gradient(135deg, #2450D8, #1C3FA6); color: #fff; padding: 14px 20px; display: flex; align-items: center; gap: 12px; }
+    #modalDetail .dd-icon { flex: none; width: 36px; height: 36px; border-radius: 9px; background: rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center; font-size: 15px; }
+    #modalDetail .dd-header h4 { margin: 0; font-size: 15px; font-weight: 700; }
+    #modalDetail .dd-header p { margin: 2px 0 0; font-size: 11.5px; color: rgba(255,255,255,.85); }
+    #modalDetail .dd-close { margin-left: auto; background: transparent; border: none; color: rgba(255,255,255,.9); font-size: 18px; padding: 6px; cursor: pointer; align-self: flex-start; }
+    #modalDetail .modal-body { padding: 14px 18px 16px; }
+    #modalDetail .dd-act { color: #2450D8; }
+
+    @@media (max-width: 900px) { .db-grid { grid-template-columns: 1fr; } }
+</style>
+
+<div class="db-head">
+    <div>
+        <h3>Welcome, @session.GetString("FULL_NAME")</h3>
+        <p>Goods Receiving summary (CKB) &middot; <span id="dbScope">All plant</span> &middot; as of <span id="dbAsOf">-</span></p>
+    </div>
+    <div class="db-filter">
+        <label for="cboPlant">Plant</label>
+        <select id="cboPlant">
+            <option value="">All plant</option>
+            @foreach (var p in plants)
+            {
+                <option value="@p.PlantCode">@p.PlantCode - @p.PlantName</option>
+            }
+        </select>
+        <label for="dtAsOf">Date</label>
+        <input type="text" class="js-date" id="dtAsOf" />
+        <button type="button" class="dp-btn dp-btn-outline" id="btn_refresh"><i class="fa fa-refresh"></i> Refresh</button>
+    </div>
+</div>
+
+<div class="db-kpis">
+    <div class="db-kpi" tabindex="0" role="button" data-detail="grn_today" title="Show the GRN list">
+        <span class="more"><i class="fa fa-external-link"></i></span>
+        <span class="lbl"><i class="fa fa-inbox"></i> Goods received today</span>
+        <span class="val" id="kGrnToday">-</span>
+        <span class="sub"><span id="kQtyToday">-</span> pcs received</span>
+    </div>
+    <div class="db-kpi" tabindex="0" role="button" data-detail="grn_month" title="Show the GRN list">
+        <span class="more"><i class="fa fa-external-link"></i></span>
+        <span class="lbl"><i class="fa fa-calendar"></i> GRN this month</span>
+        <span class="val" id="kGrnMonth">-</span>
+        <span class="sub">Last receive: <span id="kLastReceive">-</span></span>
+    </div>
+    <div class="db-kpi" tabindex="0" role="button" data-detail="due" title="Show the Delivery Note list">
+        <span class="more"><i class="fa fa-external-link"></i></span>
+        <span class="lbl"><i class="fa fa-truck"></i> DN due today, not received</span>
+        <span class="val" id="kDueToday">-</span>
+        <span class="sub">Receive plan on the selected date</span>
+    </div>
+    <div class="db-kpi" tabindex="0" role="button" data-detail="overdue" title="Show the Delivery Note list">
+        <span class="more"><i class="fa fa-external-link"></i></span>
+        <span class="lbl"><i class="fa fa-exclamation-triangle"></i> Overdue DN</span>
+        <span class="val" id="kOverdue">-</span>
+        <span class="flag" id="kOverdueFlag"></span>
+        <span class="sub">Plan date in the last 30 days, still not received</span>
+    </div>
+    <div class="db-kpi" tabindex="0" role="button" data-detail="delayed" title="Show the Delivery Note list">
+        <span class="more"><i class="fa fa-external-link"></i></span>
+        <span class="lbl"><i class="fa fa-clock-o"></i> Delayed delivery this month</span>
+        <span class="val" id="kDelayed">-</span>
+        <span class="sub">Remaining DN (#1) created</span>
+    </div>
+</div>
+
+<div class="db-grid">
+    <div class="db-panel">
+        <div class="db-panel-head">
+            <div>
+                <h4>Goods receive per day</h4>
+                <p class="hint">Number of GRN in the last 14 days &middot; selected date in dark blue</p>
+            </div>
+            <div class="total"><b id="tTrendTotal">-</b><span>GRN in 14 days</span></div>
+        </div>
+        <div class="db-chart-wrap" id="wrapTrend">
+            <div class="db-chart" id="chartTrend" style="height:280px"></div>
+            <div class="db-empty"><i class="fa fa-bar-chart"></i>No goods received in the last 14 days</div>
+        </div>
+        <div class="db-clickhint"><i class="fa fa-hand-pointer-o"></i> Click a bar to see the GRN list of that day</div>
+    </div>
+    <div class="db-panel">
+        <div class="db-panel-head">
+            <div>
+                <h4>Suppliers with most outstanding DN</h4>
+                <p class="hint">Not received, plan date in the last 30 days (top 10)</p>
+            </div>
+            <div class="total"><b id="tSupplierTotal">-</b><span>DN in top 10</span></div>
+        </div>
+        <div class="db-chart-wrap" id="wrapSupplier">
+            <div class="db-chart" id="chartSupplier" style="height:280px"></div>
+            <div class="db-empty"><i class="fa fa-check-circle"></i>No outstanding Delivery Note</div>
+        </div>
+        <div class="db-clickhint"><i class="fa fa-hand-pointer-o"></i> Click a bar to see the supplier's outstanding DN</div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalDetail" role="dialog" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="dd-header">
+                <div class="dd-icon"><i class="fa fa-list" id="ddIcon"></i></div>
+                <div>
+                    <h4 id="ddTitle">Detail</h4>
+                    <p id="ddSub">-</p>
+                </div>
+                <button type="button" class="dd-close" data-dismiss="modal"><i class="fa fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div id="gridDetail"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+    // Warna grafik (dicek dengan validator dataviz vs latar putih: kontras >= 3:1, beda jelas juga untuk buta warna):
+    // tanggal terpilih = aksen tema, hari lain = langkah lebih terang dari biru yang sama.
+    var DB_ACCENT = "#2450D8";
+    var DB_SOFT = "#6F8BE8";
+    var DB_AXIS = { color: "#DFE5EB", label: { font: { color: "#66788A", size: 11 } }, grid: { visible: false }, tick: { visible: false } };
+    var gAsOf = ""; // diisi saat halaman siap (moment dimuat layout setelah view)
+    var gTrendMax = 0;
+    var gCanPrintGrn = @Json.Serialize((bool)ViewData["CanPrintGrn"]);
+    var gCanPrintDn = @Json.Serialize((bool)ViewData["CanPrintDn"]);
+
+    function fmtNum(v) {
+        return (v == null ? 0 : v).toLocaleString("en-US");
+    }
+
+    function esc(s) {
+        return $("<div>").text(s == null ? "" : s).html();
+    }
+
+    function tip(value, key, hint) {
+        return { html: '<div class="db-tip"><div class="v">' + esc(value) + '</div><div class="k">' + esc(key) + '</div>'
+            + (hint ? '<div class="h">' + esc(hint) + '</div>' : '') + '</div>' };
+    }
+
+    $(document).ready(function () {
+        gAsOf = moment().format("YYYY-MM-DD");
+        $("#dtAsOf").val(gAsOf);
+
+        $("#chartTrend").dxChart({
+            dataSource: [],
+            legend: { visible: false },
+            commonSeriesSettings: {
+                argumentField: "DAY", valueField: "GRN_COUNT", type: "bar", barPadding: 0.4, cornerRadius: 4, color: DB_SOFT,
+                hoverStyle: { color: "#1C3FA6", hatching: { direction: "none" } },
+                selectionStyle: { color: "#1C3FA6", hatching: { direction: "none" } },
+                label: { visible: false, font: { color: "#16212B", size: 11, weight: 600 }, backgroundColor: "transparent", position: "outside" }
+            },
+            series: [{ name: "GRN" }],
+            // batang tanggal terpilih memakai warna aksen
+            customizePoint: function () {
+                return moment(this.argument).format("YYYY-MM-DD") == gAsOf ? { color: DB_ACCENT } : {};
+            },
+            // label angka hanya untuk tanggal terpilih & hari tertinggi (tidak di setiap batang)
+            customizeLabel: function () {
+                // gTrendMax dihitung saat data dimuat (konteks label tidak membawa objek seri)
+                var show = this.value > 0 && (moment(this.argument).format("YYYY-MM-DD") == gAsOf || this.value == gTrendMax);
+                return { visible: show };
+            },
+            argumentAxis: $.extend(true, {}, DB_AXIS, {
+                argumentType: "datetime", tickInterval: "day",
+                label: { format: "yyyy-MM-dd", overlappingBehavior: "hide" }
+            }),
+            valueAxis: $.extend(true, {}, DB_AXIS, {
+                grid: { visible: true, color: "#EDF1F6", width: 1 }, allowDecimals: false, min: 0, minValueMargin: 0, maxValueMargin: 0.1,
+                constantLineStyle: { color: "#98A2B3", width: 1, dashStyle: "solid", label: { font: { color: "#66788A", size: 11 } } }
+            }),
+            tooltip: {
+                enabled: true, paddingLeftRight: 12, paddingTopBottom: 8, cornerRadius: 8, shadow: { opacity: .12, blur: 6 },
+                customizeTooltip: function (arg) {
+                    return tip(fmtNum(arg.value) + " GRN", moment(arg.argument).format("ddd, YYYY-MM-DD"), arg.value > 0 ? "Click to see the list" : "");
+                }
+            },
+            onPointClick: function (e) {
+                if (!e.target.value) return;
+                openDetail("grn_day", { day: moment(e.target.argument).format("YYYY-MM-DD") });
+            }
+        });
+
+        $("#chartSupplier").dxChart({
+            dataSource: [],
+            rotated: true,
+            legend: { visible: false },
+            commonSeriesSettings: {
+                argumentField: "LABEL", valueField: "DN_COUNT", type: "bar", barPadding: 0.35, cornerRadius: 4, color: DB_ACCENT,
+                hoverStyle: { color: "#1C3FA6", hatching: { direction: "none" } },
+                label: { visible: true, font: { color: "#16212B", size: 11, weight: 600 }, backgroundColor: "transparent", position: "outside" }
+            },
+            series: [{ name: "Outstanding DN" }],
+            argumentAxis: $.extend(true, {}, DB_AXIS, { inverted: true, label: { overlappingBehavior: "none" } }),
+            valueAxis: $.extend(true, {}, DB_AXIS, { visible: false, label: { visible: false }, allowDecimals: false, min: 0, maxValueMargin: 0.15 }),
+            tooltip: {
+                enabled: true, paddingLeftRight: 12, paddingTopBottom: 8, cornerRadius: 8, shadow: { opacity: .12, blur: 6 },
+                customizeTooltip: function (arg) {
+                    var d = arg.point.data;
+                    return tip(fmtNum(arg.value) + " outstanding DN", d.SUPSCD + " - " + (d.SUPNAM || ""), "Click to see the list");
+                }
+            },
+            onPointClick: function (e) {
+                var d = e.target.data;
+                openDetail("supplier", { supplier: d.SUPSCD, supplierName: d.SUPNAM });
+            }
+        });
+
+        $(".db-kpi").on("click", function () {
+            openDetail($(this).data("detail"), {});
+        }).on("keydown", function (e) {
+            if (e.key == "Enter" || e.key == " ") { e.preventDefault(); openDetail($(this).data("detail"), {}); }
+        });
+
+        initDetailGrid();
+
+        $("#cboPlant, #dtAsOf").on("change", loadDashboard);
+        $("#btn_refresh").on("click", loadDashboard);
+
+        loadDashboard();
+    });
+
+    function loadDashboard() {
+        var plant = $("#cboPlant").val();
+        $("#dbScope").text(plant ? $("#cboPlant option:selected").text() : "All plant");
+        // data lama tetap tampil (lebih pudar) selama memuat ulang
+        $(".db-chart-wrap").addClass("loading");
+
+        $.post("@Url.Action("GetDashboard", "Home")", { plantCode: plant, asOf: $("#dtAsOf").val() }).done(function (result) {
+            if (result.status != true) {
+                showErrorMesgGrowl(result.message);
+                return;
+            }
+
+            var s = result.summary || {};
+            gAsOf = moment(result.asOf).format("YYYY-MM-DD");
+            $("#dbAsOf").text(gAsOf);
+            $("#kGrnToday").text(fmtNum(s.GRN_TODAY));
+            $("#kQtyToday").text(fmtNum(s.QTY_TODAY));
+            $("#kGrnMonth").text(fmtNum(s.GRN_MONTH));
+            $("#kLastReceive").text(s.LAST_RECEIVE ? moment(s.LAST_RECEIVE).format("YYYY-MM-DD") : "-");
+            $("#kDueToday").text(fmtNum(s.DUE_TODAY));
+            $("#kOverdue").text(fmtNum(s.OVERDUE));
+            $("#kDelayed").text(fmtNum(s.DELAYED_MONTH));
+
+            // Status selalu dengan ikon + teks, bukan warna saja
+            var $flag = $("#kOverdueFlag");
+            if (s.OVERDUE > 0) {
+                $flag.attr("class", "flag bad").html('<i class="fa fa-times-circle"></i> Needs follow up');
+            } else {
+                $flag.attr("class", "flag ok").html('<i class="fa fa-check-circle"></i> None overdue');
+            }
+
+            // tren: garis rata-rata sebagai acuan + kondisi kosong
+            var trend = result.trend || [];
+            var total = trend.reduce(function (t, r) { return t + (r.GRN_COUNT || 0); }, 0);
+            var avg = trend.length ? total / trend.length : 0;
+            gTrendMax = trend.reduce(function (m, r) { return Math.max(m, r.GRN_COUNT || 0); }, 0);
+            $("#tTrendTotal").text(fmtNum(total));
+            $("#wrapTrend").toggleClass("empty", total == 0);
+            var trendChart = $("#chartTrend").dxChart("instance");
+            trendChart.option("valueAxis.constantLines", avg > 0 ? [{
+                value: avg, label: { text: "Avg " + avg.toFixed(1), horizontalAlignment: "right", position: "outside" }
+            }] : []);
+            trendChart.option("dataSource", trend);
+
+            var suppliers = (result.suppliers || []).map(function (r) {
+                var name = r.SUPNAM || "";
+                return $.extend({ LABEL: r.SUPSCD + " " + (name.length > 24 ? name.substring(0, 24) + "..." : name) }, r);
+            });
+            $("#tSupplierTotal").text(fmtNum(suppliers.reduce(function (t, r) { return t + (r.DN_COUNT || 0); }, 0)));
+            $("#wrapSupplier").toggleClass("empty", suppliers.length == 0);
+            $("#chartSupplier").dxChart("instance").option("dataSource", suppliers);
+        }).fail(function () {
+            showErrorMesgGrowl("Failed to load dashboard");
+        }).always(function () {
+            $(".db-chart-wrap").removeClass("loading");
+        });
+    }
+
+    // ---------- detail (klik kartu / batang) ----------
+    var gDetail = null;
+
+    var GRN_COLUMNS = [
+        {
+            caption: "Print", width: 60, alignment: "center", allowFiltering: false, allowSorting: false,
+            cellTemplate: function (c, o) {
+                $("<a>").addClass("dd-act").attr({ href: "@Url.Action("Grn", "Print")?noseq=" + encodeURIComponent(o.data.NOSEQ), target: "_blank", title: "Print GRN" })
+                    .html('<i class="fa fa-print"></i>').appendTo(c);
+            }
+        },
+        { dataField: "NOSEQ", caption: "Receipt Number" },
+        { dataField: "DELIVERYNOTE", caption: "Delivery Note" },
+        { dataField: "SURATJALAN", caption: "Supplier Delivery Note" },
+        { dataField: "TRANSDATE", caption: "Receive Date", dataType: "date", format: "yyyy-MM-dd" },
+        { dataField: "PLCPCD", caption: "Plant" },
+        { dataField: "SUPSCD", caption: "Supplier Code" },
+        { dataField: "SUPNAM", caption: "Supplier Name" },
+        { dataField: "QTY", caption: "Qty", dataType: "number", format: "#,##0" },
+        { dataField: "INPUTUSER", caption: "Input By" },
+        { dataField: "INPUTDATE", caption: "Input Date", dataType: "datetime", format: "yyyy-MM-dd HH:mm" }
+    ];
+
+    function dnColumns(type) {
+        var cols = [
+            {
+                caption: "Print", width: 60, alignment: "center", allowFiltering: false, allowSorting: false,
+                cellTemplate: function (c, o) {
+                    $("<a>").addClass("dd-act").attr({ href: "@Url.Action("Dn", "Print")?dn=" + encodeURIComponent(o.data.SOCDNO), target: "_blank", title: "Print Delivery Note" })
+                        .html('<i class="fa fa-print"></i>').appendTo(c);
+                }
+            },
+            { dataField: "SOCDNO", caption: "Delivery Note" }
+        ];
+        if (type == "delayed") cols.push({ dataField: "SOCDNOORI", caption: "Original Delivery Note" });
+        cols.push(
+            { dataField: "PLCPCD", caption: "Plant" },
+            { dataField: "SUPSCD", caption: "Supplier Code" },
+            { dataField: "SUPNAM", caption: "Supplier Name" },
+            { dataField: "SOCPRD", caption: "Plan Date", calculateCellValue: function (r) { return formatYmd(r.SOCPRD); } },
+            { dataField: "SOCPRT", caption: "Plan Time" }
+        );
+        if (type == "overdue" || type == "supplier") {
+            cols.push({
+                caption: "Days Late", dataType: "number", alignment: "right",
+                calculateCellValue: function (r) { return Math.max(0, moment(gAsOf).diff(moment(r.SOCPRD, "YYYYMMDD"), "days")); },
+                cellTemplate: function (c, o) {
+                    $("<span>").text(o.value).css({ color: o.value > 0 ? "#B42318" : "#475467", fontWeight: o.value > 0 ? 700 : 400 }).appendTo(c);
+                }
+            });
+        }
+        cols.push(
+            { dataField: "ITEMS", caption: "Items", dataType: "number" },
+            { dataField: "ORDER_QTY", caption: "Order Qty", dataType: "number", format: "#,##0" },
+            { dataField: "REMAINING_QTY", caption: "Remaining Qty", dataType: "number", format: "#,##0" }
+        );
+        if (type == "delayed") {
+            cols.push({ dataField: "RECEIVED", caption: "Received", calculateCellValue: function (r) { return r.RECEIVED == 1 ? "Yes" : "No"; } });
+        }
+        return cols;
+    }
+
+    function initDetailGrid() {
+        $("#gridDetail").dxDataGrid({
+            dataSource: new DevExpress.data.CustomStore({
+                loadMode: "raw",
+                load: function () {
+                    if (!gDetail) return [];
+                    return withLoading($.post("@Url.Action("GetDashboardDetail", "Home")", gDetail.query)).then(function (result) {
+                        if (result.status != true) { showErrorMesgGrowl(result.message); return []; }
+                        $("#ddSub").text(gDetail.sub + " · " + fmtNum(result.data.length) + " " + gDetail.unit);
+                        return result.data;
+                    });
+                }
+            }),
+            showBorders: true,
+            columnAutoWidth: true,
+            allowColumnResizing: true,
+            hoverStateEnabled: true,
+            height: 440,
+            noDataText: "No data.",
+            filterRow: { visible: true, applyFilter: "auto" },
+            headerFilter: { visible: true },
+            toolbar: { visible: false },
+            paging: { pageSize: 20 },
+            pager: { visible: true, displayMode: "compact", showPageSizeSelector: true, allowedPageSizes: [20, 50, 100], showInfo: true, showNavigationButtons: true },
+            columns: []
+        });
+
+        $("#modalDetail").on("shown.bs.modal", function () {
+            $("#gridDetail").dxDataGrid("instance").updateDimensions();
+        });
+    }
+
+    function openDetail(type, opt) {
+        var plant = $("#cboPlant").val();
+        var scope = plant ? $("#cboPlant option:selected").text() : "All plant";
+        var month = moment(gAsOf).format("YYYY-MM");
+        var cfg = {
+            grn_today: { title: "Goods received on " + gAsOf, icon: "fa-inbox", unit: "GRN" },
+            grn_month: { title: "GRN this month (" + month + "-01 to " + gAsOf + ")", icon: "fa-calendar", unit: "GRN" },
+            grn_day: { title: "Goods received on " + opt.day, icon: "fa-inbox", unit: "GRN" },
+            due: { title: "DN due on " + gAsOf + ", not received", icon: "fa-truck", unit: "DN" },
+            overdue: { title: "Overdue DN (plan date in the last 30 days, not received)", icon: "fa-exclamation-triangle", unit: "DN" },
+            delayed: { title: "Delayed delivery this month (remaining DN #1)", icon: "fa-clock-o", unit: "DN" },
+            supplier: { title: "Outstanding DN - " + opt.supplier + " " + (opt.supplierName || ""), icon: "fa-building-o", unit: "DN" }
+        }[type];
+        if (!cfg) return;
+
+        gDetail = {
+            sub: scope,
+            unit: cfg.unit,
+            query: { type: type, plantCode: plant, asOf: gAsOf, day: opt.day || "", supplier: opt.supplier || "" }
+        };
+        $("#ddTitle").text(cfg.title);
+        $("#ddSub").text(scope + " · loading...");
+        $("#ddIcon").attr("class", "fa " + cfg.icon);
+
+        var grid = $("#gridDetail").dxDataGrid("instance");
+        grid.clearFilter();
+        var cols = type.indexOf("grn") == 0 ? GRN_COLUMNS : dnColumns(type);
+        // kolom Print hanya untuk user yang punya akses cetak
+        if (!(type.indexOf("grn") == 0 ? gCanPrintGrn : gCanPrintDn)) { cols = cols.filter(function (c) { return c.caption != "Print"; }); }
+        grid.option("columns", cols);
+        grid.pageIndex(0);
+        grid.refresh();
+        $("#modalDetail").modal("show");
+    }
+</script>

@@ -1,0 +1,15 @@
+# Build output
+bin/
+obj/
+publish/
+*.log
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.rsuser
+
+# Konfigurasi lokal berisi password (contoh: W-GRMS/appsettings.Development.example.json)
+appsettings.Development.json
+appsettings.*.local.json

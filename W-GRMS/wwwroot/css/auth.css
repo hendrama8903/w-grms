@@ -1,0 +1,226 @@
+/* Halaman Login & Change Password (Views/Auth) - layout panel brand biru + kartu form */
+  :root{
+    --blue-900:#0A3BB0;
+    --blue-700:#0E4FD6;
+    --blue-500:#1E7BF2;
+    --cyan:#35C6F4;
+    --ink:#0B1B3A;
+    --muted:#64748B;
+    --page:#EEF4FD;
+    --field:#F3F7FE;
+    --field-line:#DCE6F5;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html, body{height:100%;}
+  body{
+    font-family:'Inter', sans-serif;
+    color:var(--ink);
+    background:var(--page);
+    min-height:100vh;
+    overflow-x:hidden;
+  }
+
+  .lg-wrap{display:flex; min-height:100vh;}
+
+  /* ===================== panel kiri (brand + foto) ===================== */
+  .lg-hero{
+    position:relative;
+    flex:0 0 52%;
+    overflow:hidden;
+    color:#fff;
+    background:
+      linear-gradient(180deg, var(--blue-900) 0%, var(--blue-700) 34%, rgba(14,79,214,.55) 58%, rgba(14,79,214,0) 74%),
+      linear-gradient(0deg, rgba(8,40,130,.92) 0%, rgba(8,40,130,.6) 14%, rgba(8,40,130,0) 30%),
+      url('../images/login-dock.jpg') 72% 100% / auto 64% no-repeat,
+      var(--blue-700);
+  }
+  /* layar sangat lebar: foto selebar panel supaya tidak ada sisi kosong */
+  @media (min-aspect-ratio: 2/1){
+    .lg-hero{background-size:auto, auto, cover, auto;}
+  }
+  .lg-hero-inner{
+    position:relative;
+    z-index:2;
+    height:100%;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    padding:clamp(40px,8vh,84px) clamp(32px,7vw,96px) clamp(28px,6vh,56px);
+  }
+  .lg-hero-logo{width:clamp(110px,10vw,140px); height:auto; display:block; margin-bottom:clamp(18px,3vh,26px);}
+  .lg-hero h1{
+    font-family:'Plus Jakarta Sans','Inter',sans-serif;
+    font-weight:800;
+    font-size:clamp(26px,2.6vw,36px);
+    line-height:1.15;
+    letter-spacing:-.2px;
+  }
+  .lg-hero h1 .accent{color:var(--cyan); display:block;}
+  .lg-hero .sub{margin-top:6px; font-size:clamp(15px,1.3vw,19px); color:rgba(255,255,255,.88);}
+  .lg-bar{width:52px; height:3px; border-radius:3px; background:var(--cyan); margin:clamp(18px,3vh,26px) 0;}
+
+  .lg-features{display:flex; gap:clamp(18px,3vw,40px); flex-wrap:wrap;}
+  .lg-feature{width:110px; font-size:13px; line-height:1.3; color:rgba(255,255,255,.92);}
+  .lg-feature .ic{
+    width:54px; height:54px; border-radius:12px;
+    background:rgba(255,255,255,.12);
+    border:1px solid rgba(255,255,255,.22);
+    display:flex; align-items:center; justify-content:center;
+    margin-bottom:10px;
+    backdrop-filter:blur(2px);
+  }
+  .lg-feature .ic svg{width:24px; height:24px; color:#fff;}
+
+  .lg-tagline{margin-top:auto; padding-top:32px;}
+  .lg-tagline p{font-style:italic; font-size:14px; line-height:1.5; color:rgba(255,255,255,.95);}
+
+  /* lengkungan pemisah panel kiri - kanan */
+  .lg-wave{position:absolute; top:0; right:-1px; height:100%; width:clamp(90px,11vw,170px); z-index:1; pointer-events:none;}
+
+  /* ===================== panel kanan (form) ===================== */
+  .lg-main{
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:32px clamp(20px,4vw,64px);
+    background:radial-gradient(circle at 90% 85%, #DCE9FB 0, transparent 38%), var(--page);
+  }
+  .lg-card{
+    width:100%;
+    max-width:440px;
+    background:#fff;
+    border-radius:18px;
+    padding:clamp(30px,5vh,44px) clamp(24px,3vw,38px);
+    box-shadow:0 30px 70px -24px rgba(11,27,58,.22), 0 2px 8px rgba(11,27,58,.05);
+    animation:cardIn .5s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .lg-card-logo{display:block; width:96px; height:auto; margin:0 auto 14px;}
+  .lg-card h2{
+    font-family:'Plus Jakarta Sans','Inter',sans-serif;
+    font-weight:800;
+    font-size:clamp(22px,2vw,26px);
+    text-align:center;
+  }
+  .lg-card .lead{text-align:center; color:var(--muted); font-size:13px; margin:6px 0 clamp(20px,3vh,28px);}
+
+  label{display:block; font-size:13px; font-weight:600; margin-bottom:7px;}
+  .field{margin-bottom:16px;}
+  .input-group{position:relative; display:flex; align-items:center;}
+  .input-group svg.leading{position:absolute; left:15px; width:18px; height:18px; color:var(--blue-500);}
+  .input-group .trailing{
+    position:absolute; right:10px; width:34px; height:34px;
+    display:flex; align-items:center; justify-content:center;
+    background:none; border:none; cursor:pointer; color:#8A97AB; border-radius:8px;
+  }
+  .input-group .trailing:hover{color:var(--ink); background:#E9EFF8;}
+  .input-group .trailing svg{width:19px; height:19px;}
+  input[type=text], input[type=password]{
+    width:100%;
+    height:48px;
+    padding:0 48px 0 46px;
+    border:1.5px solid var(--field-line);
+    background:var(--field);
+    border-radius:12px;
+    font-size:14px;
+    font-family:'Inter',sans-serif;
+    color:var(--ink);
+    outline:none;
+    transition:border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  input::placeholder{color:#97A3B6;}
+  input:focus{background:#fff; border-color:var(--blue-500); box-shadow:0 0 0 4px rgba(30,123,242,.14);}
+
+  .btn-login{
+    position:relative;
+    margin-top:8px;
+    width:100%;
+    height:50px;
+    border:none;
+    border-radius:12px;
+    background:linear-gradient(90deg, #1D8BF5 0%, #1565E6 100%);
+    color:#fff;
+    font-size:15px;
+    font-weight:600;
+    font-family:'Inter',sans-serif;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    cursor:pointer;
+    box-shadow:0 14px 24px -10px rgba(21,101,230,.65);
+    transition:transform .15s ease, box-shadow .15s ease, filter .15s ease;
+  }
+  .btn-login:hover{transform:translateY(-1px); filter:brightness(1.05); box-shadow:0 18px 30px -12px rgba(21,101,230,.7);}
+  .btn-login:disabled{cursor:wait; filter:saturate(.7); transform:none;}
+  .btn-login svg.lock{width:17px; height:17px;}
+  .btn-login .go{
+    position:absolute; right:12px;
+    width:30px; height:30px; border-radius:50%;
+    background:rgba(255,255,255,.22);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .btn-login .go svg{width:16px; height:16px;}
+
+
+  @keyframes cardIn{from{opacity:0; transform:translateY(14px);} to{opacity:1; transform:translateY(0);}}
+
+  /* growl notification */
+  .bootstrap-growl{
+    font-family:'Inter', sans-serif; font-size:13px; font-weight:500; line-height:1.4;
+    padding:12px 34px 12px 16px; border-radius:10px; border:1px solid transparent;
+    box-shadow:0 14px 30px -10px rgba(14,63,165,.35);
+  }
+  .bootstrap-growl.alert-danger{background:#fdecec; border-color:#f5c2c2; color:#a12b2b;}
+  .bootstrap-growl.alert-success{background:#e8f8f0; border-color:#b7e6cc; color:#1a7a4c;}
+  .bootstrap-growl.alert-info{background:#EAF2FF; border-color:#c7d9f7; color:#0E3FA5;}
+  .bootstrap-growl .close{position:absolute; top:8px; right:10px; font-size:16px; line-height:1; color:inherit; opacity:.55; cursor:pointer; background:none; border:none;}
+
+  /* ===================== responsive ===================== */
+  @media (max-width: 1100px){
+    .lg-hero{flex-basis:46%;}
+    .lg-features{gap:16px;}
+    .lg-feature{width:96px;}
+  }
+  /* tablet & ponsel: panel brand jadi header ringkas di atas form */
+  @media (max-width: 860px){
+    .lg-wrap{flex-direction:column;}
+    .lg-hero{
+      flex:0 0 auto;
+      background:
+        linear-gradient(180deg, rgba(10,59,176,.92) 0%, rgba(14,79,214,.82) 60%, rgba(14,79,214,.65) 100%),
+        url('../images/login-dock.jpg') 70% 60% / cover no-repeat,
+        var(--blue-700);
+    }
+    .lg-hero-inner{min-height:0; padding:28px 24px 34px;}
+    .lg-hero h1{font-size:24px;}
+    .lg-hero-logo{width:96px; margin-bottom:12px;}
+    .lg-features, .lg-bar, .lg-tagline, .lg-wave{display:none;}
+    .lg-main{padding:24px 16px 32px;}
+    .lg-card-logo{display:none;}
+  }
+
+/* ===================== Change Password ===================== */
+.lg-note{
+  display:flex; gap:10px; align-items:flex-start;
+  margin:-8px 0 22px;
+  padding:11px 14px;
+  border-radius:10px;
+  font-size:12.5px; line-height:1.45;
+  background:#FFF6E5; border:1px solid #F5D79E; color:#8A5A00;
+}
+.lg-note svg{flex:none; width:18px; height:18px; margin-top:1px;}
+.lg-user{
+  display:flex; justify-content:center; margin:-14px 0 22px;
+}
+.lg-user span{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:4px 12px; border-radius:20px;
+  background:#EAF2FF; color:#0E3FA5; font-size:12.5px; font-weight:600;
+}
+.lg-user svg{width:14px; height:14px;}
+.pw-hint{margin-top:6px; font-size:11.5px; color:var(--muted);}
+.lg-back{
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  margin-top:18px; font-size:13px; font-weight:600;
+  color:var(--blue-700); text-decoration:none;
+}
+.lg-back:hover{text-decoration:underline;}
+.lg-back svg{width:15px; height:15px;}

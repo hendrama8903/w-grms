@@ -1,0 +1,198 @@
+<link rel="stylesheet" href="~/css/devextreme/dx.light.css" />
+<script src="~/js/devextreme/dx.web.js"></script>
+
+<style>
+    .gr-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px 16px; padding: 14px 16px 4px; }
+    .gr-form label { display: block; font-size: 12px; font-weight: 600; color: #26314f; margin-bottom: 4px; }
+    .gr-form input { width: 100%; height: 34px; border: 1.5px solid #D0D6DE; border-radius: 8px; padding: 0 10px; font-size: 13px; }
+    .gr-form input[readonly] { background: #EEF1F5; }
+    .gr-form input.gr-dn { font-weight: 700; font-size: 14px; border-color: #2450D8; }
+    #lookupGrid { height: 56vh; }
+    .gr-lookup-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .gr-lookup-filter label { margin: 0; font-weight: 600; font-size: 12.5px; }
+    .gr-lookup-filter input { height: 32px; border: 1.5px solid #D0D6DE; border-radius: 8px; padding: 0 8px; font-size: 12.5px; }
+    @@media (max-width: 600px) { .gr-form { grid-template-columns: 1fr; } }
+</style>
+
+<section class="content">
+    <div class="row">
+        <div class="col-xs-12">
+            <div class="dp-card">
+                <div class="box-header dp-toolbar">
+                    <div class="dp-toolbar-left">
+                        <button type="button" class="dp-btn dp-btn-outline" id="btn_find"><i class="fa fa-search"></i> Find DN</button>
+                        <button type="button" class="dp-btn dp-btn-primary" id="btn_print"><i class="fa fa-print"></i> Print DN</button>
+                    </div>
+                </div>
+
+                <div class="gr-form">
+                    <div>
+                        <label for="txtDn">Delivery Note</label>
+                        <input type="text" id="txtDn" class="gr-dn" placeholder="Type DN then Enter, or Find DN" autocomplete="off" />
+                    </div>
+                    <div>
+                        <label for="txtOriginal">Original DN</label>
+                        <input type="text" id="txtOriginal" readonly />
+                    </div>
+                    <div>
+                        <label for="txtDate">Receive Plan Date</label>
+                        <input type="text" id="txtDate" readonly />
+                    </div>
+                    <div>
+                        <label for="txtSupplier">Supplier</label>
+                        <input type="text" id="txtSupplier" readonly />
+                    </div>
+                    <div>
+                        <label for="txtPlant">Plant Code</label>
+                        <input type="text" id="txtPlant" readonly />
+                    </div>
+                </div>
+
+                <div class="box-body">
+                    <div id="datagrid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="modal fade" id="modalLookup" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg" style="width:900px;max-width:96vw;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title">Find Delivery Note (remaining DN)</h4>
+            </div>
+            <div class="modal-body">
+                <div class="gr-lookup-filter">
+                    <label for="lkFrom">Receive plan</label>
+                    <input type="text" class="js-date" id="lkFrom" />
+                    <label for="lkTo">to</label>
+                    <input type="text" class="js-date" id="lkTo" />
+                    <button type="button" class="dp-btn dp-btn-outline" id="btn_lookupShow"><i class="fa fa-search"></i> Show</button>
+                </div>
+                <div id="lookupGrid"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+    function computeGridHeight() {
+        // sisa di bawah grid = border kartu + padding bawah halaman (~33px)
+        return Math.max(280, $(window).height() - $("#datagrid").offset().top - 36);
+    }
+
+    $(document).ready(function () {
+        $("#datagrid").dxDataGrid({
+            dataSource: [],
+            showBorders: true,
+            columnAutoWidth: true,
+            allowColumnResizing: true,
+            noDataText: "Select a Delivery Note.",
+            height: computeGridHeight(),
+            paging: { enabled: false },
+            columns: [
+                { caption: "No", width: 50, alignment: "center", cellTemplate: function (c, o) { c.text(o.row.rowIndex + 1); } },
+                { dataField: "PAMPNO", caption: "Part Number" },
+                { dataField: "PAMPNM", caption: "Part Name" },
+                { dataField: "PAMUNO", caption: "Unique No" },
+                { dataField: "KBNKNO", caption: "Kanban No" },
+                { dataField: "KBNKCD", caption: "Key Code" },
+                { dataField: "KBNORDTPC", caption: "Qty", dataType: "number" },
+                { dataField: "RMNQTY", caption: "Remaining Qty", dataType: "number" }
+            ]
+        });
+
+        $("#txtDn").on("keydown", function (e) {
+            if (e.key == "Enter") { e.preventDefault(); loadDn($.trim($(this).val())); }
+        });
+
+        $("#btn_find").on("click", openLookup);
+
+        $("#btn_print").on("click", function () {
+            var dn = $.trim($("#txtDn").val());
+            if (!dn) { showErrorMesgGrowl("No data selected to print"); return; }
+            window.open("@Url.Action("Dn", "Print")?dn=" + encodeURIComponent(dn), "_blank");
+        });
+
+        $(window).on("resize", function () {
+            $("#datagrid").dxDataGrid("instance").option("height", computeGridHeight());
+        });
+    });
+
+    function loadDn(dn) {
+        if (!dn) { return; }
+        popUpProgressShow();
+        $.post("@Url.Action("Detail", "DeliveryNotePrinting")", { dn: dn }).always(function () {
+            popUpProgressHide();
+        }).fail(function () {
+            showErrorMesgGrowl("Failed to load Delivery Note " + dn);
+        }).done(function (result) {
+            if (result.status != true) {
+                showErrorMesgGrowl(result.message);
+                $("#datagrid").dxDataGrid("instance").option("dataSource", []);
+                return;
+            }
+
+            var first = result.data[0];
+            $("#txtDn").val(first.SOCDNO);
+            $("#txtOriginal").val(first.SOCDNOORI);
+            $("#txtDate").val(first.SOCPRD ? moment(first.SOCPRD).format("YYYY-MM-DD") : "");
+            $("#txtSupplier").val(first.SUPSCD + " - " + first.SUPNAM);
+            $("#txtPlant").val(first.PLCPCD);
+            $("#datagrid").dxDataGrid("instance").option("dataSource", result.data);
+        });
+    }
+
+    function openLookup() {
+        $("#modalLookup").modal("show");
+
+        var $grid = $("#lookupGrid");
+        if (!$grid.data("dxDataGrid")) {
+            $("#lkFrom").val(moment().subtract(3, "months").format("YYYY-MM-DD"));
+            $("#lkTo").val(moment().format("YYYY-MM-DD"));
+            $("#btn_lookupShow").on("click", function () { $grid.dxDataGrid("instance").refresh(); });
+
+            $grid.dxDataGrid({
+                dataSource: new DevExpress.data.CustomStore({
+                    loadMode: "raw",
+                    load: function () {
+                        // daftar DN bisa beberapa detik: tampilkan loading yang sama dengan proses lain
+                        popUpProgressShow();
+                        return $.post("@Url.Action("Lookup", "DeliveryNotePrinting")", { from: $("#lkFrom").val(), to: $("#lkTo").val() }).always(function () {
+                            popUpProgressHide();
+                        }).then(function (result) {
+                            if (result.status != true) { showErrorMesgGrowl(result.message); return []; }
+                            return result.data;
+                        }, function () {
+                            showErrorMesgGrowl("Failed to load data");
+                            return $.Deferred().resolve([]).promise();
+                        });
+                    }
+                }),
+                showBorders: true,
+                columnAutoWidth: true,
+                filterRow: { visible: true },
+                toolbar: { visible: false },
+                paging: { pageSize: 20 },
+                pager: { visible: true, displayMode: "compact", showPageSizeSelector: true, allowedPageSizes: [20, 50, 100], showInfo: true, showNavigationButtons: true },
+                hoverStateEnabled: true,
+                noDataText: "Data not found.",
+                columns: [
+                    { dataField: "SOCDNO", caption: "Delivery Note" },
+                    { dataField: "SUPSCD", caption: "Supplier Code" },
+                    { dataField: "SUPNAM", caption: "Supplier Name" },
+                    { dataField: "SOCPRD", caption: "Receive Plan Date", dataType: "date", format: "yyyy-MM-dd", sortOrder: "desc" }
+                ],
+                onRowClick: function (e) {
+                    if (e.rowType != "data") { return; }
+                    $("#modalLookup").modal("hide");
+                    loadDn(e.data.SOCDNO);
+                }
+            });
+        } else {
+            $grid.dxDataGrid("instance").refresh();
+        }
+    }
+</script>

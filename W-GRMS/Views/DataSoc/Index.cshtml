@@ -1,0 +1,106 @@
+@using GRMS.Models
+@{
+    var plants = (List<CkbSourceOptions>)ViewData["Plants"];
+}
+<link rel="stylesheet" href="~/css/devextreme/dx.light.css" />
+<script src="~/js/devextreme/dx.web.js"></script>
+
+<style>
+    .tr-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .tr-filter label { margin: 0; font-weight: 600; font-size: 12.5px; }
+    .tr-filter select, .tr-filter input { height: 34px; border: 1.5px solid #D0D6DE; border-radius: 8px; padding: 0 8px; font-size: 12.5px; }
+    .tr-filter select { min-width: 200px; }
+</style>
+
+<section class="content">
+    <div class="row">
+        <div class="col-xs-12">
+            <div class="dp-card">
+                <div class="box-header dp-toolbar">
+                    <div class="dp-toolbar-left tr-filter">
+                        <label for="cboPlant">Plant</label>
+                        <select id="cboPlant">
+                            @foreach (var p in plants)
+                            {
+                                <option value="@p.PlantCode">@p.PlantCode - @p.PlantName</option>
+                            }
+                        </select>
+                        <label for="txtPeriod">Period</label>
+                        <input type="text" id="txtPeriod" placeholder="YYYYMM" maxlength="6" style="width:100px" />
+                        <button type="button" class="dp-btn dp-btn-outline" id="btn_search"><i class="fa fa-search"></i> Show</button>
+                    </div>
+                    <div class="dp-toolbar-right">
+                        <button type="button" class="dp-btn dp-btn-outline" id="btn_export"><i class="fa fa-download"></i> Export</button>
+                    </div>
+                </div>
+                <div class="box-body">
+                    <div id="datagrid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script type="text/javascript">
+    function computeGridHeight() {
+        // sisa di bawah grid = border kartu + padding bawah halaman (~33px)
+        return Math.max(300, $(window).height() - $("#datagrid").offset().top - 36);
+    }
+
+    function filter() {
+        return { plantCode: $("#cboPlant").val(), period: $.trim($("#txtPeriod").val()) };
+    }
+
+    $(document).ready(function () {
+        $("#txtPeriod").val(moment().format("YYYYMM"));
+
+        $("#datagrid").dxDataGrid({
+            dataSource: [],
+            showBorders: true,
+            columnAutoWidth: true,
+            allowColumnResizing: true,
+            noDataText: "Select plant & period then click Show.",
+            height: computeGridHeight(),
+            filterRow: { visible: true },
+            headerFilter: { visible: true },
+            toolbar: { visible: false },
+            // kolom tanggal CKB (varchar yyyyMMdd, nama kolom berakhiran D mis. SOCPOD/SOCPRD) tampil yyyy-MM-dd
+            customizeColumns: function (columns) {
+                columns.forEach(function (c) {
+                    if (c.dataField && /D$/.test(c.dataField)) {
+                        c.calculateCellValue = function (r) { return formatYmd(r[c.dataField]); };
+                    }
+                });
+            },
+            paging: { pageSize: 50 },
+            pager: { visible: true, displayMode: "compact", showPageSizeSelector: true, allowedPageSizes: [25, 50, 100, 200], showInfo: true, showNavigationButtons: true }
+        });
+
+        $("#btn_search").on("click", function () {
+            if (!/^\d{6}$/.test(filter().period)) { showErrorMesgGrowl("Period format must be YYYYMM"); return; }
+
+            popUpProgressShow();
+            $.post("@Url.Action("Search", "DataSoc")", filter()).done(function (result) {
+                if (result.status != true) {
+                    showErrorMesgGrowl(result.message);
+                    return;
+                }
+                // Kolom OLKSOC mengikuti database CKB, jadi grid dibentuk ulang dari data
+                var grid = $("#datagrid").dxDataGrid("instance");
+                grid.option("columns", undefined);
+                grid.option("dataSource", result.data);
+            }).always(function () {
+                popUpProgressHide();
+            });
+        });
+
+        $("#btn_export").on("click", function () {
+            if (!/^\d{6}$/.test(filter().period)) { showErrorMesgGrowl("Period format must be YYYYMM"); return; }
+            window.location.href = "@Url.Action("DownloadExcel", "DataSoc")?" + $.param(filter());
+        });
+
+        $(window).on("resize", function () {
+            $("#datagrid").dxDataGrid("instance").option("height", computeGridHeight());
+        });
+    });
+</script>

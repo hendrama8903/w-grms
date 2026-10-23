@@ -1,0 +1,240 @@
+@using GRMS.Models
+@{
+    var plants = (List<CkbSourceOptions>)ViewData["Plants"];
+}
+<link rel="stylesheet" href="~/css/devextreme/dx.light.css" />
+<script src="~/js/devextreme/dx.web.js"></script>
+
+<style>
+    #modalArea .modal-dialog { width: 480px; max-width: 96vw; }
+    #modalArea .modal-content { border: none; border-radius: 14px; overflow: hidden; }
+    #modalArea .ra-header { background: linear-gradient(135deg, #2450D8, #1C3FA6); color: #fff; padding: 16px 22px; display: flex; align-items: center; gap: 12px; }
+    #modalArea .ra-header-icon { flex: none; width: 38px; height: 38px; border-radius: 9px; background: rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    #modalArea .ra-header h4 { font-size: 15.5px; font-weight: 700; margin: 0; }
+    #modalArea .ra-close { margin-left: auto; background: transparent; border: none; color: rgba(255,255,255,.9); font-size: 18px; padding: 6px; cursor: pointer; }
+    #modalArea .modal-body { padding: 20px 24px; background: #F4F6F8; }
+    #modalArea .ra-field { margin-bottom: 14px; }
+    #modalArea .ra-field label { display: block; font-size: 12px; font-weight: 600; color: #26314f; margin-bottom: 5px; }
+    #modalArea .ra-field input, #modalArea .ra-field select {
+        width: 100%; height: 36px; padding: 0 12px; border: 1.5px solid #D0D6DE; border-radius: 8px; font-size: 12.5px; color: #1D2939; background: #fff;
+    }
+    #modalArea .ra-field input:focus, #modalArea .ra-field select:focus { border-color: #2450D8; outline: none; box-shadow: 0 0 0 3px rgba(36,80,216,.12); }
+    #modalArea .ra-field input[readonly] { background: #EEF1F5; }
+    #modalArea .modal-footer { background: #fff; border-top: 1px solid #E3E8EE; padding: 14px 22px; margin: 0; }
+</style>
+
+<section class="content">
+    <div class="row">
+        <div class="col-xs-12">
+            <div class="dp-card">
+                <div class="box-header dp-toolbar">
+                    <div class="dp-toolbar-left">
+                        <button type="button" class="dp-btn dp-btn-outline" id="btn_refresh"><i class="fa fa-refresh"></i> Refresh</button>
+                        @if ((bool)ViewData["Save"])
+                        {
+                            <button type="button" class="dp-btn dp-btn-primary" id="btn_add"><i class="fa fa-plus"></i> Add</button>
+                        }
+                    </div>
+                    <div class="dp-toolbar-right">
+                        <button type="button" class="dp-icon-btn" id="btn_columns" title="Show/Hide Columns"><i class="fa fa-cog"></i></button>
+                    </div>
+                </div>
+                <div class="box-body">
+                    <div id="datagrid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="modal fade" id="modalArea" role="dialog" aria-hidden="true" data-backdrop="static">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="ra-header">
+                <div class="ra-header-icon"><i class="fa fa-map-marker"></i></div>
+                <h4 id="raTitle">Add Receiving Area</h4>
+                <button type="button" class="ra-close" data-dismiss="modal"><i class="fa fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="ra-field">
+                    <label for="raCode">Area Code <span class="text-red">*</span></label>
+                    <input type="text" id="raCode" maxlength="4" autocomplete="off" placeholder="e.g. 1E" oninput="this.value = this.value.replace(/[\s,]/g, '').toUpperCase()" />
+                </div>
+                <div class="ra-field">
+                    <label for="raName">Area Name</label>
+                    <input type="text" id="raName" maxlength="100" autocomplete="off" placeholder="Description of the receiving area" />
+                </div>
+                <div class="ra-field">
+                    <label for="raPlant">Plant</label>
+                    <select id="raPlant">
+                        <option value="">-</option>
+                        @foreach (var p in plants)
+                        {
+                            <option value="@p.PlantCode">@p.PlantCode - @p.PlantName</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="dp-btn dp-btn-outline" data-dismiss="modal"><i class="fa fa-times"></i> Cancel</button>
+                <button type="button" class="dp-btn dp-btn-primary" id="btn_save"><i class="fa fa-save"></i> Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+    var gCanSave = @Json.Serialize((bool)ViewData["Save"]);
+    var gCanDelete = @Json.Serialize((bool)ViewData["Delete"]);
+    var gPlantNames = @Json.Serialize(plants.ToDictionary(x => x.PlantCode, x => x.PlantName));
+    var gMode = "ADD";
+
+    function computeGridHeight() {
+        // sisa di bawah grid = border kartu + padding bawah halaman (~33px)
+        return Math.max(300, $(window).height() - $("#datagrid").offset().top - 36);
+    }
+
+    $(document).ready(function () {
+        var columns = [
+            { dataField: "AREA_CODE", caption: "Area Code", width: 110 },
+            { dataField: "AREA_NAME", caption: "Area Name" },
+            {
+                dataField: "PLANT_CODE",
+                caption: "Plant",
+                calculateCellValue: function (r) {
+                    return r.PLANT_CODE ? r.PLANT_CODE + (gPlantNames[r.PLANT_CODE] ? " - " + gPlantNames[r.PLANT_CODE] : "") : "";
+                }
+            },
+            { dataField: "USER_COUNT", caption: "Used By (Users)", dataType: "number", width: 130 },
+            { dataField: "CHANGED_BY", caption: "Changed By", visible: false },
+            { dataField: "CHANGED_DT", caption: "Changed Date", dataType: "datetime", format: "yyyy-MM-dd HH:mm", visible: false }
+        ];
+
+        if (gCanSave || gCanDelete) {
+            columns.unshift({
+                caption: "Action",
+                width: 90,
+                alignment: "center",
+                allowFiltering: false,
+                allowHiding: false,
+                cellTemplate: function (container, options) {
+                    if (gCanSave) {
+                        $("<button>").attr({ type: "button", title: "Edit" }).addClass("dp-act-kebab")
+                            .html('<i class="fa fa-pencil" style="color:#2450D8"></i>')
+                            .on("click", function () { onEdit(options.data); })
+                            .appendTo(container);
+                    }
+                    if (gCanDelete) {
+                        $("<button>").attr({ type: "button", title: "Delete" }).addClass("dp-act-kebab").css("margin-left", "4px")
+                            .html('<i class="fa fa-trash-o" style="color:#C62828"></i>')
+                            .on("click", function () { onDelete(options.data); })
+                            .appendTo(container);
+                    }
+                }
+            });
+        }
+
+        $("#datagrid").dxDataGrid({
+            dataSource: new DevExpress.data.CustomStore({
+                loadMode: "raw",
+                load: function () {
+                    return withLoading($.post("@Url.Action("Search", "ReceivingArea")")).then(function (result) {
+                        if (result.status != true) { showErrorMesgGrowl(result.message); return []; }
+                        return result.data;
+                    });
+                }
+            }),
+            showBorders: true,
+            columnAutoWidth: true,
+            allowColumnResizing: true,
+            columnResizingMode: "widget",
+            noDataText: "Data not found.",
+            height: computeGridHeight(),
+            filterRow: { visible: true, applyFilter: "auto" },
+            headerFilter: { visible: true },
+            toolbar: { visible: false },
+            paging: { pageSize: 50 },
+            pager: { visible: true, displayMode: "compact", showPageSizeSelector: true, allowedPageSizes: [25, 50, 100], showInfo: true, showNavigationButtons: true },
+            columnChooser: { enabled: true, mode: "select" },
+            columns: columns
+        });
+
+        $("#btn_refresh").on("click", refreshGrid);
+        $("#btn_columns").on("click", function () {
+            $("#datagrid").dxDataGrid("instance").showColumnChooser();
+        });
+        $("#btn_add").on("click", function () {
+            gMode = "ADD";
+            $("#raTitle").text("Add Receiving Area");
+            $("#raCode").val("").prop("readonly", false);
+            $("#raName, #raPlant").val("");
+            $("#modalArea").modal("show");
+        });
+        $("#btn_save").on("click", onSave);
+        $("#modalArea").on("shown.bs.modal", function () {
+            $(gMode == "ADD" ? "#raCode" : "#raName").trigger("focus");
+        });
+
+        $(window).on("resize", function () {
+            $("#datagrid").dxDataGrid("instance").option("height", computeGridHeight());
+        });
+    });
+
+    function refreshGrid() {
+        $("#datagrid").dxDataGrid("instance").refresh();
+    }
+
+    function onEdit(row) {
+        gMode = "EDIT";
+        $("#raTitle").text("Edit Receiving Area");
+        $("#raCode").val(row.AREA_CODE).prop("readonly", true);
+        $("#raName").val(row.AREA_NAME || "");
+        $("#raPlant").val(row.PLANT_CODE || "");
+        $("#modalArea").modal("show");
+    }
+
+    function onSave() {
+        var data = {
+            screenMode: gMode,
+            AREA_CODE: $.trim($("#raCode").val()),
+            AREA_NAME: $.trim($("#raName").val()),
+            PLANT_CODE: $("#raPlant").val()
+        };
+        if (data.AREA_CODE == "") { showErrorMesgGrowl("Area Code should not be empty"); return; }
+
+        $.ajax({
+            type: "POST",
+            url: "@Url.Action("Save", "ReceivingArea")",
+            data: data
+        }).done(function (result) {
+            if (result.status == true) {
+                showSuccessMesgGrowl(result.message);
+                $("#modalArea").modal("hide");
+                refreshGrid();
+            } else {
+                showErrorMesgGrowl(result.message);
+            }
+        }).fail(function () {
+            showErrorMesgGrowl("Failed to save data");
+        });
+    }
+
+    function onDelete(row) {
+        showConfirmMesg("Are you sure you want to delete receiving area " + $("<div>").text(row.AREA_CODE).html() + "?", function () {
+            $.ajax({
+                type: "POST",
+                url: "@Url.Action("Delete", "ReceivingArea")",
+                data: { AREA_CODE: row.AREA_CODE }
+            }).done(function (result) {
+                if (result.status == true) {
+                    showSuccessMesgGrowl(result.message);
+                    refreshGrid();
+                } else {
+                    showErrorMesgGrowl(result.message);
+                }
+            }).fail(function () {
+                showErrorMesgGrowl("Delete failed");
+            });
+        }, "Confirmation");
+    }
+</script>

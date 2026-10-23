@@ -1,0 +1,259 @@
+<link rel="stylesheet" href="~/css/devextreme/dx.light.css" />
+<script src="~/js/devextreme/dx.web.js"></script>
+
+<style>
+    #datagrid .dx-datagrid-filter-row .dx-texteditor {
+        border: 1px solid #d9d9d9;
+        border-radius: 6px;
+        background: #fff;
+    }
+
+    .um-role-pill {
+        display: inline-block;
+        padding: 2px 9px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 600;
+        background: #E7F1FB;
+        color: #1C3FA6;
+    }
+
+    .um-status-cell { display: flex; align-items: center; gap: 6px; }
+    .um-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #1E9E63; flex: none; }
+    .um-status-dot.inactive { background: #C62828; }
+    .um-expired { color: #C62828; font-weight: 600; }
+</style>
+
+<div class="box-body">
+    <div id="datagrid"></div>
+</div>
+
+<script type="text/javascript">
+    var gCanEdit = @Json.Serialize((bool)ViewData["Edit"]);
+    var gCanDelete = @Json.Serialize((bool)ViewData["Delete"]);
+    var gCanRestore = @Json.Serialize((bool)ViewData["Restore"]);
+
+    function computeGridHeight() {
+        var gridTop = $("#datagrid").offset().top;
+        return Math.max(300, $(window).height() - gridTop - 90);
+    }
+
+    $(document).ready(function () {
+        var gridStore = new DevExpress.data.CustomStore({
+            key: "USER_ID",
+            loadMode: "raw",
+            load: function () {
+                var d = withLoading($.Deferred());
+
+                $.ajax({
+                    type: "POST",
+                    url: "@Url.Action("Search", "User")",
+                    data: { showDeleted: $("#chkShowDeleted").is(":checked") }
+                }).done(function (result) {
+                    if (result.status == true) {
+                        d.resolve(result.data);
+                    } else {
+                        showErrorMesgGrowl(result.message);
+                        d.resolve([]);
+                    }
+                }).fail(function () {
+                    d.reject("Data loading error");
+                });
+
+                return d.promise();
+            }
+        });
+
+        $("#datagrid").dxDataGrid({
+            dataSource: gridStore,
+            showBorders: true,
+            columnAutoWidth: true,
+            allowColumnResizing: true,
+            columnResizingMode: "widget",
+            noDataText: "Data not found.",
+            height: computeGridHeight(),
+            filterRow: { visible: false, applyFilter: "auto" },
+            headerFilter: { visible: true },
+            toolbar: { visible: false },
+            paging: { pageSize: 25 },
+            pager: {
+                visible: true,
+                displayMode: "compact",
+                showPageSizeSelector: true,
+                allowedPageSizes: [10, 25, 50, 100],
+                showInfo: true,
+                showNavigationButtons: true
+            },
+            columnChooser: { enabled: true, mode: "select" },
+            columnFixing: { enabled: true },
+            columns: [
+                {
+                    caption: "No",
+                    width: 50,
+                    alignment: "center",
+                    allowHiding: false,
+                    allowFiltering: false,
+                    fixed: true,
+                    fixedPosition: "left",
+                    cellTemplate: function (container, options) {
+                        var pageIndex = options.component.pageIndex();
+                        var pageSize = options.component.pageSize();
+                        container.text(pageIndex * pageSize + options.row.rowIndex + 1);
+                    }
+                },
+                { dataField: "USER_ID", caption: "User ID", fixed: true, fixedPosition: "left" },
+                { dataField: "USER_NAME", caption: "Name" },
+                { dataField: "NIK", caption: "NIK" },
+                { dataField: "DEPT", caption: "Department" },
+                { dataField: "EMAIL", caption: "Email", visible: false },
+                { dataField: "PHONE", caption: "Phone", visible: false },
+                {
+                    caption: "Role",
+                    dataField: "ROLE_NAME",
+                    cellTemplate: function (container, options) {
+                        if (!options.data.ROLE_NAME) { return; }
+                        $("<span>").addClass("um-role-pill").text(options.data.ROLE_NAME).appendTo(container);
+                    }
+                },
+                { dataField: "PLANTS", caption: "Receiving Areas" },
+                {
+                    dataField: "EXP_PWD",
+                    caption: "Password Expired",
+                    dataType: "date",
+                    format: "yyyy-MM-dd",
+                    cellTemplate: function (container, options) {
+                        var value = options.data.EXP_PWD;
+                        if (value == null) { return; }
+                        var $s = $("<span>").text(moment(value).format("YYYY-MM-DD"));
+                        if (moment(value).isBefore(moment(), "day")) { $s.addClass("um-expired"); }
+                        $s.appendTo(container);
+                    }
+                },
+                {
+                    caption: "Status",
+                    calculateCellValue: function (row) {
+                        return row.DELETE_FLAG == "1" ? "Inactive" : "Active";
+                    },
+                    cellTemplate: function (container, options) {
+                        var inactive = options.data.DELETE_FLAG == "1";
+                        var $cell = $("<div>").addClass("um-status-cell");
+                        $("<span>").addClass("um-status-dot").toggleClass("inactive", inactive).appendTo($cell);
+                        $("<span>").text(inactive ? "Inactive" : "Active").appendTo($cell);
+                        $cell.appendTo(container);
+                    }
+                },
+                { dataField: "CHANGED_BY", caption: "Changed By", visible: false },
+                { dataField: "CHANGED_DT", caption: "Changed Date", dataType: "datetime", format: "yyyy-MM-dd HH:mm", visible: false },
+                {
+                    caption: "Action",
+                    alignment: "center",
+                    width: 70,
+                    allowHiding: false,
+                    allowFiltering: false,
+                    fixed: true,
+                    fixedPosition: "right",
+                    cellTemplate: function (container, options) {
+                        umAppendActionKebab(container, options.data);
+                    }
+                }
+            ]
+        });
+
+        $("#btn_columns").on("click", function () {
+            $("#datagrid").dxDataGrid("instance").showColumnChooser();
+        });
+
+        $("#btn_toggleFilters").on("click", function () {
+            var grid = $("#datagrid").dxDataGrid("instance");
+            var visible = !grid.option("filterRow.visible");
+            grid.option("filterRow.visible", visible);
+            $(this).toggleClass("active", visible);
+        });
+
+        $("#btn_refresh, #chkShowDeleted").on("click", function () {
+            refreshGrid();
+        });
+
+        $(window).on("resize", function () {
+            $("#datagrid").dxDataGrid("instance").option("height", computeGridHeight());
+        });
+    });
+
+    function refreshGrid() {
+        $("#datagrid").dxDataGrid("instance").refresh();
+    }
+
+    function umCloseActionMenu() {
+        $(".um-dropdown-menu").remove();
+    }
+
+    function umAppendActionKebab(container, row) {
+        var $btn = $("<button>").attr({ type: "button", title: "Actions" }).addClass("dp-act-kebab")
+            .html('<i class="fa fa-ellipsis-v"></i>')
+            .on("click", function (e) {
+                e.stopPropagation();
+                var alreadyOpen = $btn.data("menu-open");
+                umCloseActionMenu();
+                if (alreadyOpen) {
+                    $btn.data("menu-open", false);
+                    return;
+                }
+                umOpenActionMenu($btn, row);
+                $btn.data("menu-open", true);
+            });
+
+        container.append($btn);
+    }
+
+    function umOpenActionMenu($btn, row) {
+        var $menu = $("<ul>").addClass("dropdown-menu dp-dropdown-menu um-dropdown-menu")
+            .css({ position: "fixed", "z-index": 2000, "min-width": "160px", background: "#fff", margin: 0, "list-style": "none" });
+
+        var inactive = row.DELETE_FLAG == "1";
+
+        if (!inactive) {
+            if (gCanEdit) {
+                $("<li>").append($("<button>").attr("type", "button").addClass("dp-menu-edit").html('<i class="fa fa-pencil"></i> Edit').on("click", function (e) {
+                    e.stopPropagation(); umCloseActionMenu(); onEditPrepare(row);
+                })).appendTo($menu);
+            }
+            if (gCanDelete) {
+                if ($menu.children().length > 0) {
+                    $menu.append('<li class="divider"></li>');
+                }
+                $("<li>").append($("<button>").attr("type", "button").addClass("dp-menu-delete").html('<i class="fa fa-trash-o"></i> Delete').on("click", function (e) {
+                    e.stopPropagation(); umCloseActionMenu(); onDeletePrepare(row);
+                })).appendTo($menu);
+            }
+        } else if (gCanRestore) {
+            $("<li>").append($("<button>").attr("type", "button").addClass("dp-menu-restore").html('<i class="fa fa-undo"></i> Restore').on("click", function (e) {
+                e.stopPropagation(); umCloseActionMenu(); onRestorePrepare(row);
+            })).appendTo($menu);
+        }
+
+        if ($menu.children().length == 0) {
+            $("<li>").append($("<span>").css({ padding: "6px 14px", display: "block", color: "#98A2B3" }).text("No action available")).appendTo($menu);
+        }
+
+        $menu.appendTo("body").show();
+
+        var btnRect = $btn[0].getBoundingClientRect();
+        var menuWidth = $menu.outerWidth();
+        var menuHeight = $menu.outerHeight();
+        var left = Math.min(btnRect.right - menuWidth, window.innerWidth - menuWidth - 8);
+        var top = btnRect.bottom + 4;
+        if (top + menuHeight > window.innerHeight) {
+            top = btnRect.top - menuHeight - 4;
+        }
+        $menu.css({ left: Math.max(8, left) + "px", top: top + "px" });
+    }
+
+    $(document).on("click", function () {
+        $(".dp-act-kebab").data("menu-open", false);
+        umCloseActionMenu();
+    });
+
+    $(window).on("resize", function () {
+        umCloseActionMenu();
+    });
+</script>

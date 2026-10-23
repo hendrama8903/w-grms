@@ -1,0 +1,46 @@
+<div class="mf-function-header">
+    <div>
+        <div class="mf-breadcrumb" id="mfBreadcrumb">
+            <span class="mf-breadcrumb-icon"><i class="fa fa-folder-open-o"></i></span>
+            <span>Select a menu</span>
+        </div>
+    </div>
+    @if ((bool)ViewData["Function"])
+    {
+        <button type="button" class="dp-btn dp-btn-primary" id="btn_add_function" disabled><i class="fa fa-plus"></i> Add Function</button>
+    }
+</div>
+
+<div class="mf-function-table-wrap">
+    <table class="mf-function-table">
+        <thead>
+            <tr>
+                <th>Function ID</th>
+                <th>Function Name</th>
+                <th>Description</th>
+                <th>Status</th>
+                <th>Used By</th>
+                <th style="width:40px;"></th>
+            </tr>
+        </thead>
+        <tbody id="mfFunctionBody">
+            <tr><td colspan="6" class="mf-empty-state">Select a menu on the left to see its functions.</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="mf-pagination">
+    <div>
+        <select class="form-control input-sm" id="mfPageSize" style="width:70px; display:inline-block;">
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+        </select>
+    </div>
+    <div class="mf-pagination-info" id="mfPaginationInfo">Showing 0 of 0 functions</div>
+    <div class="mf-pagination-nav">
+        <button type="button" class="dp-icon-btn" id="mfPagePrev"><i class="fa fa-chevron-left"></i></button>
+        <button type="button" class="dp-icon-btn active" id="mfPageCurrent">1</button>
+        <button type="button" class="dp-icon-btn" id="mfPageNext"><i class="fa fa-chevron-right"></i></button>
+    </div>
+</div>
